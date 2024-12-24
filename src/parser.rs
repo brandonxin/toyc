@@ -1,5 +1,7 @@
 use std::io::Read;
 
+use crate::ast::{self, Function};
+
 struct Reader<R: Read> {
     input: R,
 }
@@ -77,7 +79,7 @@ impl<R: Read> Reader<R> {
     }
 }
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 enum Token {
     Func,
     Extern,
@@ -92,10 +94,14 @@ enum Token {
     Integer(u64),
 
     Eq,
+    Lt,
     Add,
     Sub,
     Mul,
     Div,
+
+    BitwiseNot,
+    LogicalNot,
 
     LParenth,
     RParenth,
@@ -106,6 +112,7 @@ enum Token {
 
     Colon,
     SemiColon,
+    Comma,
 
     EoF,
 }
@@ -186,10 +193,13 @@ impl<R: Read> Lexer<R> {
 
         let token = match self.last {
             '=' => Token::Eq,
+            '<' => Token::Lt,
             '+' => Token::Add,
             '-' => Token::Sub,
             '*' => Token::Mul,
             '/' => Token::Div,
+            '~' => Token::BitwiseNot,
+            '!' => Token::LogicalNot,
             '(' => Token::LParenth,
             ')' => Token::RParenth,
             '[' => Token::LBracket,
@@ -198,6 +208,7 @@ impl<R: Read> Lexer<R> {
             '}' => Token::RBrace,
             ':' => Token::Colon,
             ';' => Token::SemiColon,
+            ',' => Token::Comma,
             _ => panic!(""),
         };
         self.last = match self.getchar() {
@@ -220,6 +231,446 @@ impl<R: Read> Lexer<R> {
         }
 
         Some(ch)
+    }
+}
+
+struct Parser<R: Read> {
+    lexer: Lexer<R>,
+    curr: Token,
+}
+
+impl<R: Read> Parser<R> {
+    pub fn new(input: R) -> Parser<R> {
+        Parser {
+            lexer: Lexer::<R>::new(input),
+            curr: Token::EoF,
+        }
+    }
+
+    fn binop_precedence(token: &Token) -> isize {
+        match token {
+            Token::Eq => 2,
+            Token::Lt => 10,
+            Token::Add => 20,
+            Token::Sub => 20,
+            Token::Mul => 40,
+            Token::Div => 40,
+            _ => -1,
+        }
+    }
+
+    pub fn parse(&mut self, unit: &mut ast::CompilationUnit) {
+        self.get_next_token();
+        loop {
+            match self.curr {
+                Token::EoF => return,
+                Token::SemiColon => self.get_next_token(),
+                Token::Func => self.parse_function(unit),
+                Token::Extern => self.parse_extern(unit),
+                _ => panic!("unexpected token"),
+            }
+        }
+    }
+
+    fn parse_function(&mut self, unit: &mut ast::CompilationUnit) {
+        // eat 'func'
+        self.get_next_token();
+
+        let proto = self.parse_prototype();
+
+        if self.curr != Token::LBrace {
+            panic!("expected '{{'");
+        }
+        let body = self.parse_block_stmt();
+
+        let func = ast::Function::new(proto, body);
+        let decl = ast::Declaration::Function(func);
+
+        unit.push(decl);
+    }
+
+    fn parse_extern(&mut self, unit: &mut ast::CompilationUnit) {
+        // Eat 'extern'
+        self.get_next_token();
+
+        let proto = self.parse_prototype();
+        let decl = ast::Declaration::Prototype(proto);
+
+        unit.push(decl);
+    }
+
+    fn parse_prototype(&mut self) -> ast::Prototype {
+        let func_name = if let Token::Identifier(ref s) = self.curr {
+            s.clone()
+        } else {
+            panic!("expected function name");
+        };
+
+        self.get_next_token();
+
+        if self.curr != Token::LParenth {
+            panic!("expected '('");
+        }
+        self.get_next_token();
+
+        let mut parameters = Vec::<ast::Parameter>::new();
+        while let Token::Identifier(param_name) = self.curr.clone() {
+            self.get_next_token();
+            if self.curr != Token::Colon {
+                panic!("expected ':' after parameter name");
+            }
+
+            self.get_next_token();
+            let type_name = if let Token::Identifier(ref s) = self.curr {
+                s.clone()
+            } else {
+                panic!("expected type after ':'");
+            };
+            parameters.push(ast::Parameter::new(param_name, type_name));
+
+            self.get_next_token();
+            match self.curr {
+                Token::Comma => self.get_next_token(),
+                Token::RParenth => break,
+                _ => panic!("expected ')' or ','"),
+            }
+        }
+
+        if self.curr != Token::RParenth {
+            panic!("expected ')");
+        }
+
+        self.get_next_token();
+        if self.curr != Token::Colon {
+            return ast::Prototype::new(func_name, String::from("void"), parameters);
+        }
+
+        self.get_next_token();
+        let return_type = if let Token::Identifier(ref s) = self.curr {
+            s.clone()
+        } else {
+            panic!("expected return type");
+        };
+
+        self.get_next_token();
+        ast::Prototype::new(func_name, return_type, parameters)
+    }
+
+    fn parse_stmt(&mut self) -> Option<ast::Stmt> {
+        match self.curr {
+            Token::LBrace => Some(self.parse_block_stmt()),
+            Token::If => Some(self.parse_if_stmt()),
+            Token::While => Some(self.parse_while_stmt()),
+            Token::Var => Some(self.parse_var_decl_stmt()),
+            Token::Return => Some(self.parse_return_stmt()),
+            Token::SemiColon => {
+                self.get_next_token();
+                None
+            }
+            _ => Some(self.parse_expr_stmt()),
+        }
+    }
+
+    // block ::= '{' stmt* '}'
+    fn parse_block_stmt(&mut self) -> ast::Stmt {
+        self.get_next_token();
+
+        let mut stmts = Vec::<ast::Stmt>::new();
+        while self.curr != Token::RBrace {
+            if let Some(x) = self.parse_stmt() {
+                stmts.push(x);
+            }
+        }
+
+        self.get_next_token();
+
+        ast::Stmt::Block(stmts)
+    }
+
+    // ifexpr
+    //   ::= 'if' expr block
+    //   ::= 'if' expr block else block
+    fn parse_if_stmt(&mut self) -> ast::Stmt {
+        self.get_next_token();
+
+        let cond = self.parse_expr();
+
+        if self.curr != Token::LBrace {
+            panic!("expected '{{'");
+        }
+        let then_stmt = self.parse_block_stmt();
+
+        if self.curr != Token::Else {
+            return ast::Stmt::IfElse(ast::IfElse::new(cond, then_stmt, None));
+        }
+
+        self.get_next_token();
+        if self.curr != Token::LBrace {
+            panic!("expected '{{'");
+        }
+        let else_stmt = self.parse_block_stmt();
+
+        ast::Stmt::IfElse(ast::IfElse::new(cond, then_stmt, Some(else_stmt)))
+    }
+
+    // whilestmt ::= 'while' expr block
+    fn parse_while_stmt(&mut self) -> ast::Stmt {
+        self.get_next_token();
+
+        let cond = self.parse_expr();
+
+        if self.curr != Token::LBrace {
+            panic!("expected '{{'");
+        }
+        let body = self.parse_block_stmt();
+
+        ast::Stmt::While(ast::While::new(cond, body))
+    }
+
+    // varstmt ::= 'var' identifier ':' identifier ('=' expr)? ';'
+    fn parse_var_decl_stmt(&mut self) -> ast::Stmt {
+        self.get_next_token();
+
+        let var_name = if let Token::Identifier(ref s) = self.curr {
+            s.clone()
+        } else {
+            panic!("expected variable name");
+        };
+
+        self.get_next_token();
+        if self.curr != Token::Colon {
+            panic!("expected ':'");
+        }
+
+        self.get_next_token();
+        let type_name = if let Token::Identifier(ref s) = self.curr {
+            s.clone()
+        } else {
+            panic!("expected type name");
+        };
+
+        self.get_next_token();
+        let expr = if self.curr == Token::Eq {
+            self.get_next_token();
+            Some(self.parse_expr())
+        } else {
+            None
+        };
+
+        if self.curr != Token::SemiColon {
+            panic!("expected ';'");
+        }
+
+        self.get_next_token();
+
+        ast::Stmt::VarDecl(ast::VarDecl::new(var_name, type_name, expr))
+    }
+
+    // returnstmt ::= 'return' expr? ';'
+    fn parse_return_stmt(&mut self) -> ast::Stmt {
+        self.get_next_token();
+
+        let expr = if self.curr != Token::SemiColon {
+            Some(self.parse_expr())
+        } else {
+            None
+        };
+
+        if self.curr != Token::SemiColon {
+            panic!("expected ';'");
+        }
+
+        self.get_next_token();
+
+        ast::Stmt::Return(ast::Return::new(expr))
+    }
+
+    // exprstmt ::= expr ';'
+    fn parse_expr_stmt(&mut self) -> ast::Stmt {
+        let expr = self.parse_expr();
+
+        if self.curr != Token::SemiColon {
+            panic!("expected ';'");
+        }
+
+        self.get_next_token();
+
+        ast::Stmt::ExprStmt(expr)
+    }
+
+    // expression
+    //   ::= unary '=' expression
+    fn parse_expr(&mut self) -> ast::Expr {
+        self.parse_assignment()
+    }
+
+    // assignment ::= unary ('=' assignment)?
+    fn parse_assignment(&mut self) -> ast::Expr {
+        let lhs = self.parse_ternary();
+
+        if self.curr == Token::Eq {
+            self.get_next_token();
+            let rhs = self.parse_assignment();
+            let bin = ast::Binary::new(ast::BinaryOp::Assignment, lhs, rhs);
+            ast::Expr::Binary(bin)
+        } else {
+            lhs
+        }
+    }
+
+    fn parse_ternary(&mut self) -> ast::Expr {
+        self.parse_logical_or()
+    }
+
+    fn parse_logical_or(&mut self) -> ast::Expr {
+        self.parse_logical_and()
+    }
+
+    fn parse_logical_and(&mut self) -> ast::Expr {
+        self.parse_bitwise_or()
+    }
+
+    fn parse_bitwise_or(&mut self) -> ast::Expr {
+        self.parse_bitwise_xor()
+    }
+
+    fn parse_bitwise_xor(&mut self) -> ast::Expr {
+        self.parse_bitwise_and()
+    }
+
+    fn parse_bitwise_and(&mut self) -> ast::Expr {
+        self.parse_equality()
+    }
+
+    // expr
+    //  ::= comparison
+    //  ::= comparison ('==' comparison)*
+    //  ::= comparison ('!=' comparison)*
+    fn parse_equality(&mut self) -> ast::Expr {
+        self.parse_comparison()
+    }
+
+    fn parse_comparison(&mut self) -> ast::Expr {
+        self.parse_addition()
+    }
+
+    // expr ::= multiplication ( ('+' / '-') multiplication)*
+    fn parse_addition(&mut self) -> ast::Expr {
+        let mut lhs = self.parse_multiplication();
+        loop {
+            let binop = match self.curr {
+                Token::Add => ast::BinaryOp::Add,
+                Token::Sub => ast::BinaryOp::Sub,
+                _ => return lhs,
+            };
+            self.get_next_token();
+            lhs = ast::Expr::Binary(ast::Binary::new(binop, lhs, self.parse_multiplication()));
+        }
+    }
+
+    // expr ::= multiplication ( ('*' / '/') multiplication)*
+    fn parse_multiplication(&mut self) -> ast::Expr {
+        let mut lhs = self.parse_unary();
+        loop {
+            let binop = match self.curr {
+                Token::Mul => ast::BinaryOp::Mul,
+                Token::Div => ast::BinaryOp::Div,
+                _ => return lhs,
+            };
+            self.get_next_token();
+            lhs = ast::Expr::Binary(ast::Binary::new(binop, lhs, self.parse_unary()));
+        }
+    }
+
+    // unary
+    //   ::= primary
+    //   ::= '~' unary
+    //   ::= '!' unary
+    //   ::= '-' unary
+    fn parse_unary(&mut self) -> ast::Expr {
+        let op = match self.curr {
+            Token::BitwiseNot => ast::UnaryOp::BitwiseNot,
+            Token::LogicalNot => ast::UnaryOp::BitwiseNot,
+            Token::Sub => ast::UnaryOp::Neg,
+            _ => return self.parse_primary(),
+        };
+
+        self.get_next_token();
+        ast::Expr::Unary(ast::Unary::new(op, self.parse_unary()))
+    }
+
+    // primary
+    //   ::= identifierexpr
+    //   ::= numberexpr
+    //   ::= parenexpr
+    fn parse_primary(&mut self) -> ast::Expr {
+        match self.curr {
+            Token::Identifier(ref s) => self.parse_identifier_expr(),
+            Token::Integer(n) => self.parse_number_expr(),
+            Token::LParenth => self.parse_paren_expr(),
+            _ => panic!("unexpected token"),
+        }
+    }
+
+    // identifierexpr
+    //   ::= identifier
+    //   ::= identifier '(' expression* ')'
+    fn parse_identifier_expr(&mut self) -> ast::Expr {
+        let name = if let Token::Identifier(ref s) = self.curr {
+            s.clone()
+        } else {
+            panic!("expected identifier");
+        };
+
+        self.get_next_token();
+        if self.curr != Token::LParenth {
+            return ast::Expr::Variable(name);
+        }
+
+        // This is a function call
+        self.get_next_token();
+        let mut args = Vec::<ast::Expr>::new();
+        while self.curr != Token::RParenth {
+            args.push(self.parse_expr());
+            if self.curr != Token::Comma {
+                break;
+            }
+            self.get_next_token();
+        }
+
+        if self.curr != Token::RParenth {
+            panic!("expected ')'");
+        }
+
+        self.get_next_token();
+        ast::Expr::Call(ast::Call::new(name, args))
+    }
+
+    // parenexpr ::= '(' expression ')'
+    fn parse_paren_expr(&mut self) -> ast::Expr {
+        self.get_next_token();
+        let expr = self.parse_expr();
+        if self.curr != Token::RParenth {
+            panic!("expected ')'");
+        }
+        self.get_next_token();
+        expr
+    }
+
+    // numberexpr ::= number
+    fn parse_number_expr(&mut self) -> ast::Expr {
+        let number = if let Token::Integer(n) = self.curr {
+            n
+        } else {
+            panic!("expected number");
+        };
+
+        self.get_next_token();
+        ast::Expr::Integer(number)
+    }
+
+    fn get_next_token(&mut self) {
+        self.curr = self.lexer.gettok();
     }
 }
 
@@ -405,7 +856,7 @@ mod tests {
     }
 
     #[test]
-    fn lexer() {
+    fn lexer_fib() {
         let src = String::from(
             r"func fib(n: Int64) : Int64 {
     if n {
@@ -479,5 +930,81 @@ mod tests {
             println!("{i}: expectedd: {answer:?}, actual: {token:?}");
             assert_eq!(&{ token }, answer);
         }
+    }
+
+    #[test]
+    fn parser_fib() {
+        let src = String::from(
+            r"func fib(n: Int64) : Int64 {
+    if n {
+        if n - 1 {
+            return fib(n - 1) + fib(n - 2);
+        } else {
+            return 1;
+        }
+    } else {
+        return 1;
+    }
+}
+
+",
+        );
+
+        let mut parser = Parser::new(src.as_bytes());
+        let mut unit = ast::CompilationUnit::new();
+        parser.parse(&mut unit);
+
+        let mut expected = ast::CompilationUnit::new();
+        let func = Function::new(
+            ast::Prototype::new(
+                String::from("fib"),
+                String::from("Int64"),
+                vec![ast::Parameter::new(
+                    String::from("n"),
+                    String::from("Int64"),
+                )],
+            ),
+            ast::Stmt::Block(vec![ast::Stmt::IfElse(ast::IfElse::new(
+                ast::Expr::Variable(String::from("n")),
+                ast::Stmt::Block(vec![ast::Stmt::IfElse(ast::IfElse::new(
+                    ast::Expr::Binary(ast::Binary::new(
+                        ast::BinaryOp::Sub,
+                        ast::Expr::Variable(String::from("n")),
+                        ast::Expr::Integer(1),
+                    )),
+                    ast::Stmt::Block(vec![ast::Stmt::Return(ast::Return::new(Some(
+                        ast::Expr::Binary(ast::Binary::new(
+                            ast::BinaryOp::Add,
+                            ast::Expr::Call(ast::Call::new(
+                                String::from("fib"),
+                                vec![ast::Expr::Binary(ast::Binary::new(
+                                    ast::BinaryOp::Sub,
+                                    ast::Expr::Variable(String::from("n")),
+                                    ast::Expr::Integer(1),
+                                ))],
+                            )),
+                            ast::Expr::Call(ast::Call::new(
+                                String::from("fib"),
+                                vec![ast::Expr::Binary(ast::Binary::new(
+                                    ast::BinaryOp::Sub,
+                                    ast::Expr::Variable(String::from("n")),
+                                    ast::Expr::Integer(2),
+                                ))],
+                            )),
+                        )),
+                    )))]),
+                    Some(ast::Stmt::Block(vec![ast::Stmt::Return(ast::Return::new(
+                        Some(ast::Expr::Integer(1)),
+                    ))])),
+                ))]),
+                Some(ast::Stmt::Block(vec![ast::Stmt::Return(ast::Return::new(
+                    Some(ast::Expr::Integer(1)),
+                ))])),
+            ))]),
+        );
+        let decl = ast::Declaration::Function(func);
+        expected.push(decl);
+
+        assert_eq!(unit, expected);
     }
 }
