@@ -77,6 +77,152 @@ impl<R: Read> Reader<R> {
     }
 }
 
+#[derive(PartialEq, Eq, Debug)]
+enum Token {
+    Func,
+    Extern,
+    If,
+    Else,
+    For,
+    While,
+    Return,
+    Var,
+
+    Identifier(String),
+    Integer(u64),
+
+    Eq,
+    Add,
+    Sub,
+    Mul,
+    Div,
+
+    LParenth,
+    RParenth,
+    LBracket,
+    RBracket,
+    LBrace,
+    RBrace,
+
+    Colon,
+    SemiColon,
+
+    EoF,
+}
+
+struct Lexer<R: Read> {
+    input: Reader<R>,
+    last: char,
+    row: isize,
+    col: isize,
+}
+
+impl<R: Read> Lexer<R> {
+    pub fn new(input: R) -> Lexer<R> {
+        Lexer {
+            input: Reader::<R> { input },
+            last: ' ',
+            row: 1,
+            col: 0,
+        }
+    }
+
+    pub fn gettok(&mut self) -> Token {
+        while self.last.is_whitespace() {
+            self.last = match self.getchar() {
+                Some(ch) => ch,
+                None => return Token::EoF,
+            }
+        }
+
+        if self.last.is_alphabetic() {
+            let mut word = String::new();
+
+            while self.last.is_alphanumeric() || self.last == '_' {
+                word.push(self.last);
+                self.last = match self.getchar() {
+                    Some(ch) => ch,
+                    None => ' ',
+                };
+            }
+
+            match word.as_str() {
+                "func" => return Token::Func,
+                "extern" => return Token::Extern,
+                "if" => return Token::If,
+                "else" => return Token::Else,
+                "for" => return Token::For,
+                "while" => return Token::While,
+                "return" => return Token::Return,
+                "var" => return Token::Var,
+                _ => return Token::Identifier(word),
+            }
+        }
+
+        if self.last.is_digit(10) {
+            let mut number = String::new();
+
+            while self.last.is_digit(10) {
+                number.push(self.last);
+                self.last = match self.getchar() {
+                    Some(ch) => ch,
+                    None => ' ',
+                };
+            }
+
+            let number = number.parse::<u64>().unwrap();
+            return Token::Integer(number);
+        }
+
+        if self.last == '#' {
+            while self.last != '\n' && self.last != '\r' {
+                self.last = match self.getchar() {
+                    Some(ch) => ch,
+                    None => return Token::EoF,
+                };
+                return self.gettok();
+            }
+        }
+
+        let token = match self.last {
+            '=' => Token::Eq,
+            '+' => Token::Add,
+            '-' => Token::Sub,
+            '*' => Token::Mul,
+            '/' => Token::Div,
+            '(' => Token::LParenth,
+            ')' => Token::RParenth,
+            '[' => Token::LBracket,
+            ']' => Token::RBracket,
+            '{' => Token::LBrace,
+            '}' => Token::RBrace,
+            ':' => Token::Colon,
+            ';' => Token::SemiColon,
+            _ => panic!(""),
+        };
+        self.last = match self.getchar() {
+            Some(ch) => ch,
+            None => ' ',
+        };
+        token
+    }
+
+    fn getchar(&mut self) -> Option<char> {
+        let Some(ch) = self.input.getchar() else {
+            return None;
+        };
+
+        if ch == '\n' {
+            self.row += 1;
+            self.col = 0;
+        } else {
+            self.col += 1;
+        }
+
+        Some(ch)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -256,5 +402,82 @@ mod tests {
         let input: [u8; 4] = [0xF4, 0x90, 0x00, 0x00];
         let mut reader = Reader { input: &input[..] };
         reader.getchar();
+    }
+
+    #[test]
+    fn lexer() {
+        let src = String::from(
+            r"func fib(n: Int64) : Int64 {
+    if n {
+        if n - 1 {
+            return fib(n - 1) + fib(n - 2);
+        } else {
+            return 1;
+        }
+    } else {
+        return 1;
+    }
+}
+
+",
+        );
+
+        let mut lexer = Lexer::new(src.as_bytes());
+        let tokens = [
+            Token::Func,
+            Token::Identifier(String::from("fib")),
+            Token::LParenth,
+            Token::Identifier(String::from("n")),
+            Token::Colon,
+            Token::Identifier(String::from("Int64")),
+            Token::RParenth,
+            Token::Colon,
+            Token::Identifier(String::from("Int64")),
+            Token::LBrace,
+            Token::If,
+            Token::Identifier(String::from("n")),
+            Token::LBrace,
+            Token::If,
+            Token::Identifier(String::from("n")),
+            Token::Sub,
+            Token::Integer(1),
+            Token::LBrace,
+            Token::Return,
+            Token::Identifier(String::from("fib")),
+            Token::LParenth,
+            Token::Identifier(String::from("n")),
+            Token::Sub,
+            Token::Integer(1),
+            Token::RParenth,
+            Token::Add,
+            Token::Identifier(String::from("fib")),
+            Token::LParenth,
+            Token::Identifier(String::from("n")),
+            Token::Sub,
+            Token::Integer(2),
+            Token::RParenth,
+            Token::SemiColon,
+            Token::RBrace,
+            Token::Else,
+            Token::LBrace,
+            Token::Return,
+            Token::Integer(1),
+            Token::SemiColon,
+            Token::RBrace,
+            Token::RBrace,
+            Token::Else,
+            Token::LBrace,
+            Token::Return,
+            Token::Integer(1),
+            Token::SemiColon,
+            Token::RBrace,
+            Token::RBrace,
+        ];
+
+        for (i, answer) in tokens.iter().enumerate() {
+            let token = lexer.gettok();
+            println!("{i}: expectedd: {answer:?}, actual: {token:?}");
+            assert_eq!(&{ token }, answer);
+        }
     }
 }
