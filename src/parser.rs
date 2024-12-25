@@ -2,6 +2,7 @@ use std::io::Read;
 
 use crate::ast::{self, Function};
 
+#[derive(Debug)]
 struct Reader<R: Read> {
     input: R,
 }
@@ -117,6 +118,7 @@ enum Token {
     EoF,
 }
 
+#[derive(Debug)]
 struct Lexer<R: Read> {
     input: Reader<R>,
     last: char,
@@ -234,6 +236,7 @@ impl<R: Read> Lexer<R> {
     }
 }
 
+#[derive(Debug)]
 struct Parser<R: Read> {
     lexer: Lexer<R>,
     curr: Token,
@@ -342,7 +345,11 @@ impl<R: Read> Parser<R> {
 
         self.get_next_token();
         if self.curr != Token::Colon {
-            return ast::Prototype::new(func_name, String::from("void"), parameters);
+            return ast::Prototype::new(
+                func_name,
+                String::from("void"),
+                parameters,
+            );
         }
 
         self.get_next_token();
@@ -564,7 +571,11 @@ impl<R: Read> Parser<R> {
                 _ => return lhs,
             };
             self.get_next_token();
-            lhs = ast::Expr::Binary(ast::Binary::new(binop, lhs, self.parse_multiplication()));
+            lhs = ast::Expr::Binary(ast::Binary::new(
+                binop,
+                lhs,
+                self.parse_multiplication(),
+            ));
         }
     }
 
@@ -578,7 +589,11 @@ impl<R: Read> Parser<R> {
                 _ => return lhs,
             };
             self.get_next_token();
-            lhs = ast::Expr::Binary(ast::Binary::new(binop, lhs, self.parse_unary()));
+            lhs = ast::Expr::Binary(ast::Binary::new(
+                binop,
+                lhs,
+                self.parse_unary(),
+            ));
         }
     }
 
@@ -972,34 +987,36 @@ mod tests {
                         ast::Expr::Variable(String::from("n")),
                         ast::Expr::Integer(1),
                     )),
-                    ast::Stmt::Block(vec![ast::Stmt::Return(ast::Return::new(Some(
-                        ast::Expr::Binary(ast::Binary::new(
-                            ast::BinaryOp::Add,
-                            ast::Expr::Call(ast::Call::new(
-                                String::from("fib"),
-                                vec![ast::Expr::Binary(ast::Binary::new(
-                                    ast::BinaryOp::Sub,
-                                    ast::Expr::Variable(String::from("n")),
-                                    ast::Expr::Integer(1),
-                                ))],
-                            )),
-                            ast::Expr::Call(ast::Call::new(
-                                String::from("fib"),
-                                vec![ast::Expr::Binary(ast::Binary::new(
-                                    ast::BinaryOp::Sub,
-                                    ast::Expr::Variable(String::from("n")),
-                                    ast::Expr::Integer(2),
-                                ))],
-                            )),
-                        )),
-                    )))]),
-                    Some(ast::Stmt::Block(vec![ast::Stmt::Return(ast::Return::new(
-                        Some(ast::Expr::Integer(1)),
-                    ))])),
+                    ast::Stmt::Block(vec![ast::Stmt::Return(
+                        ast::Return::new(Some(ast::Expr::Binary(
+                            ast::Binary::new(
+                                ast::BinaryOp::Add,
+                                ast::Expr::Call(ast::Call::new(
+                                    String::from("fib"),
+                                    vec![ast::Expr::Binary(ast::Binary::new(
+                                        ast::BinaryOp::Sub,
+                                        ast::Expr::Variable(String::from("n")),
+                                        ast::Expr::Integer(1),
+                                    ))],
+                                )),
+                                ast::Expr::Call(ast::Call::new(
+                                    String::from("fib"),
+                                    vec![ast::Expr::Binary(ast::Binary::new(
+                                        ast::BinaryOp::Sub,
+                                        ast::Expr::Variable(String::from("n")),
+                                        ast::Expr::Integer(2),
+                                    ))],
+                                )),
+                            ),
+                        ))),
+                    )]),
+                    Some(ast::Stmt::Block(vec![ast::Stmt::Return(
+                        ast::Return::new(Some(ast::Expr::Integer(1))),
+                    )])),
                 ))]),
-                Some(ast::Stmt::Block(vec![ast::Stmt::Return(ast::Return::new(
-                    Some(ast::Expr::Integer(1)),
-                ))])),
+                Some(ast::Stmt::Block(vec![ast::Stmt::Return(
+                    ast::Return::new(Some(ast::Expr::Integer(1))),
+                )])),
             ))]),
         );
         let decl = ast::Declaration::Function(func);

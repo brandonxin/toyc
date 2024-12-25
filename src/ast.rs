@@ -14,7 +14,11 @@ pub struct Prototype {
 }
 
 impl Prototype {
-    pub fn new(func_name: String, return_type: String, params: Vec<Parameter>) -> Prototype {
+    pub fn new(
+        func_name: String,
+        return_type: String,
+        params: Vec<Parameter>,
+    ) -> Prototype {
         return Prototype {
             func_name,
             return_type,
@@ -102,7 +106,11 @@ pub struct VarDecl {
 }
 
 impl VarDecl {
-    pub fn new(var_name: String, type_name: String, expr: Option<Expr>) -> VarDecl {
+    pub fn new(
+        var_name: String,
+        type_name: String,
+        expr: Option<Expr>,
+    ) -> VarDecl {
         VarDecl {
             var_name,
             type_name,
