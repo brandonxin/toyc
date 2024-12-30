@@ -237,7 +237,7 @@ impl<R: Read> Lexer<R> {
 }
 
 #[derive(Debug)]
-struct Parser<R: Read> {
+pub struct Parser<R: Read> {
     lexer: Lexer<R>,
     curr: Token,
 }
@@ -391,7 +391,7 @@ impl<R: Read> Parser<R> {
 
         self.get_next_token();
 
-        ast::Stmt::Block(stmts)
+        ast::Stmt::Block { stmts }
     }
 
     // ifexpr
@@ -400,38 +400,47 @@ impl<R: Read> Parser<R> {
     fn parse_if_stmt(&mut self) -> ast::Stmt {
         self.get_next_token();
 
-        let cond = self.parse_expr();
+        let cond = Box::new(self.parse_expr());
 
         if self.curr != Token::LBrace {
             panic!("expected '{{'");
         }
-        let then_stmt = self.parse_block_stmt();
+        let then_stmt = Box::new(self.parse_block_stmt());
+        let else_stmt = None;
 
         if self.curr != Token::Else {
-            return ast::Stmt::IfElse(ast::IfElse::new(cond, then_stmt, None));
+            return ast::Stmt::IfElse {
+                cond,
+                then_stmt,
+                else_stmt,
+            };
         }
 
         self.get_next_token();
         if self.curr != Token::LBrace {
             panic!("expected '{{'");
         }
-        let else_stmt = self.parse_block_stmt();
+        let else_stmt = Some(Box::new(self.parse_block_stmt()));
 
-        ast::Stmt::IfElse(ast::IfElse::new(cond, then_stmt, Some(else_stmt)))
+        ast::Stmt::IfElse {
+            cond,
+            then_stmt,
+            else_stmt,
+        }
     }
 
     // whilestmt ::= 'while' expr block
     fn parse_while_stmt(&mut self) -> ast::Stmt {
         self.get_next_token();
 
-        let cond = self.parse_expr();
+        let cond = Box::new(self.parse_expr());
 
         if self.curr != Token::LBrace {
             panic!("expected '{{'");
         }
-        let body = self.parse_block_stmt();
+        let body = Box::new(self.parse_block_stmt());
 
-        ast::Stmt::While(ast::While::new(cond, body))
+        ast::Stmt::While { cond, body }
     }
 
     // varstmt ::= 'var' identifier ':' identifier ('=' expr)? ';'
@@ -459,7 +468,7 @@ impl<R: Read> Parser<R> {
         self.get_next_token();
         let expr = if self.curr == Token::Eq {
             self.get_next_token();
-            Some(self.parse_expr())
+            Some(Box::new(self.parse_expr()))
         } else {
             None
         };
@@ -470,7 +479,11 @@ impl<R: Read> Parser<R> {
 
         self.get_next_token();
 
-        ast::Stmt::VarDecl(ast::VarDecl::new(var_name, type_name, expr))
+        ast::Stmt::VarDecl {
+            var_name,
+            type_name,
+            expr,
+        }
     }
 
     // returnstmt ::= 'return' expr? ';'
@@ -478,7 +491,7 @@ impl<R: Read> Parser<R> {
         self.get_next_token();
 
         let expr = if self.curr != Token::SemiColon {
-            Some(self.parse_expr())
+            Some(Box::new(self.parse_expr()))
         } else {
             None
         };
@@ -489,12 +502,12 @@ impl<R: Read> Parser<R> {
 
         self.get_next_token();
 
-        ast::Stmt::Return(ast::Return::new(expr))
+        ast::Stmt::Return { expr }
     }
 
     // exprstmt ::= expr ';'
     fn parse_expr_stmt(&mut self) -> ast::Stmt {
-        let expr = self.parse_expr();
+        let expr = Box::new(self.parse_expr());
 
         if self.curr != Token::SemiColon {
             panic!("expected ';'");
@@ -502,7 +515,7 @@ impl<R: Read> Parser<R> {
 
         self.get_next_token();
 
-        ast::Stmt::ExprStmt(expr)
+        ast::Stmt::ExprStmt { expr }
     }
 
     // expression
@@ -511,15 +524,18 @@ impl<R: Read> Parser<R> {
         self.parse_assignment()
     }
 
-    // assignment ::= unary ('=' assignment)?
+    // assignment ::= ternary ('=' assignment)?
     fn parse_assignment(&mut self) -> ast::Expr {
         let lhs = self.parse_ternary();
 
         if self.curr == Token::Eq {
             self.get_next_token();
             let rhs = self.parse_assignment();
-            let bin = ast::Binary::new(ast::BinaryOp::Assignment, lhs, rhs);
-            ast::Expr::Binary(bin)
+            ast::Expr::Binary {
+                op: ast::BinaryOp::Assignment,
+                lhs: Box::new(lhs),
+                rhs: Box::new(rhs),
+            }
         } else {
             lhs
         }
@@ -565,35 +581,37 @@ impl<R: Read> Parser<R> {
     fn parse_addition(&mut self) -> ast::Expr {
         let mut lhs = self.parse_multiplication();
         loop {
-            let binop = match self.curr {
+            let op = match self.curr {
                 Token::Add => ast::BinaryOp::Add,
                 Token::Sub => ast::BinaryOp::Sub,
                 _ => return lhs,
             };
             self.get_next_token();
-            lhs = ast::Expr::Binary(ast::Binary::new(
-                binop,
-                lhs,
-                self.parse_multiplication(),
-            ));
+
+            lhs = ast::Expr::Binary {
+                op,
+                lhs: Box::new(lhs),
+                rhs: Box::new(self.parse_multiplication()),
+            };
         }
     }
 
-    // expr ::= multiplication ( ('*' / '/') multiplication)*
+    // expr ::= unary ( ('*' / '/') unary)*
     fn parse_multiplication(&mut self) -> ast::Expr {
         let mut lhs = self.parse_unary();
         loop {
-            let binop = match self.curr {
+            let op = match self.curr {
                 Token::Mul => ast::BinaryOp::Mul,
                 Token::Div => ast::BinaryOp::Div,
                 _ => return lhs,
             };
             self.get_next_token();
-            lhs = ast::Expr::Binary(ast::Binary::new(
-                binop,
-                lhs,
-                self.parse_unary(),
-            ));
+
+            lhs = ast::Expr::Binary {
+                op,
+                lhs: Box::new(lhs),
+                rhs: Box::new(self.parse_unary()),
+            };
         }
     }
 
@@ -611,7 +629,10 @@ impl<R: Read> Parser<R> {
         };
 
         self.get_next_token();
-        ast::Expr::Unary(ast::Unary::new(op, self.parse_unary()))
+        ast::Expr::Unary {
+            op,
+            operand: Box::new(self.parse_unary()),
+        }
     }
 
     // primary
@@ -620,8 +641,8 @@ impl<R: Read> Parser<R> {
     //   ::= parenexpr
     fn parse_primary(&mut self) -> ast::Expr {
         match self.curr {
-            Token::Identifier(ref s) => self.parse_identifier_expr(),
-            Token::Integer(n) => self.parse_number_expr(),
+            Token::Identifier(_) => self.parse_identifier_expr(),
+            Token::Integer(_) => self.parse_number_expr(),
             Token::LParenth => self.parse_paren_expr(),
             _ => panic!("unexpected token"),
         }
@@ -639,7 +660,7 @@ impl<R: Read> Parser<R> {
 
         self.get_next_token();
         if self.curr != Token::LParenth {
-            return ast::Expr::Variable(name);
+            return ast::Expr::Variable { name };
         }
 
         // This is a function call
@@ -658,7 +679,10 @@ impl<R: Read> Parser<R> {
         }
 
         self.get_next_token();
-        ast::Expr::Call(ast::Call::new(name, args))
+        ast::Expr::Call {
+            callee: name,
+            arguments: args,
+        }
     }
 
     // parenexpr ::= '(' expression ')'
@@ -681,7 +705,7 @@ impl<R: Read> Parser<R> {
         };
 
         self.get_next_token();
-        ast::Expr::Integer(number)
+        ast::Expr::Integer { value: number }
     }
 
     fn get_next_token(&mut self) {
@@ -979,45 +1003,85 @@ mod tests {
                     String::from("Int64"),
                 )],
             ),
-            ast::Stmt::Block(vec![ast::Stmt::IfElse(ast::IfElse::new(
-                ast::Expr::Variable(String::from("n")),
-                ast::Stmt::Block(vec![ast::Stmt::IfElse(ast::IfElse::new(
-                    ast::Expr::Binary(ast::Binary::new(
-                        ast::BinaryOp::Sub,
-                        ast::Expr::Variable(String::from("n")),
-                        ast::Expr::Integer(1),
-                    )),
-                    ast::Stmt::Block(vec![ast::Stmt::Return(
-                        ast::Return::new(Some(ast::Expr::Binary(
-                            ast::Binary::new(
-                                ast::BinaryOp::Add,
-                                ast::Expr::Call(ast::Call::new(
-                                    String::from("fib"),
-                                    vec![ast::Expr::Binary(ast::Binary::new(
-                                        ast::BinaryOp::Sub,
-                                        ast::Expr::Variable(String::from("n")),
-                                        ast::Expr::Integer(1),
-                                    ))],
-                                )),
-                                ast::Expr::Call(ast::Call::new(
-                                    String::from("fib"),
-                                    vec![ast::Expr::Binary(ast::Binary::new(
-                                        ast::BinaryOp::Sub,
-                                        ast::Expr::Variable(String::from("n")),
-                                        ast::Expr::Integer(2),
-                                    ))],
-                                )),
-                            ),
-                        ))),
-                    )]),
-                    Some(ast::Stmt::Block(vec![ast::Stmt::Return(
-                        ast::Return::new(Some(ast::Expr::Integer(1))),
-                    )])),
-                ))]),
-                Some(ast::Stmt::Block(vec![ast::Stmt::Return(
-                    ast::Return::new(Some(ast::Expr::Integer(1))),
-                )])),
-            ))]),
+            ast::Stmt::Block {
+                stmts: vec![ast::Stmt::IfElse {
+                    cond: Box::new(ast::Expr::Variable {
+                        name: String::from("n"),
+                    }),
+                    then_stmt: Box::new(ast::Stmt::Block {
+                        stmts: vec![ast::Stmt::IfElse {
+                            cond: Box::new(ast::Expr::Binary {
+                                op: ast::BinaryOp::Sub,
+                                lhs: Box::new(ast::Expr::Variable {
+                                    name: String::from("n"),
+                                }),
+                                rhs: Box::new(ast::Expr::Integer { value: 1 }),
+                            }),
+                            then_stmt: Box::new(ast::Stmt::Block {
+                                stmts: vec![ast::Stmt::Return {
+                                    expr: Some(Box::new(ast::Expr::Binary {
+                                        op: ast::BinaryOp::Add,
+                                        lhs: Box::new(ast::Expr::Call {
+                                            callee: String::from("fib"),
+                                            arguments: vec![
+                                                ast::Expr::Binary {
+                                                    op: ast::BinaryOp::Sub,
+                                                    lhs: Box::new(
+                                                        ast::Expr::Variable {
+                                                            name: String::from(
+                                                                "n",
+                                                            ),
+                                                        },
+                                                    ),
+                                                    rhs: Box::new(
+                                                        ast::Expr::Integer {
+                                                            value: 1,
+                                                        },
+                                                    ),
+                                                },
+                                            ],
+                                        }),
+                                        rhs: Box::new(ast::Expr::Call {
+                                            callee: String::from("fib"),
+                                            arguments: vec![
+                                                ast::Expr::Binary {
+                                                    op: ast::BinaryOp::Sub,
+                                                    lhs: Box::new(
+                                                        ast::Expr::Variable {
+                                                            name: String::from(
+                                                                "n",
+                                                            ),
+                                                        },
+                                                    ),
+                                                    rhs: Box::new(
+                                                        ast::Expr::Integer {
+                                                            value: 2,
+                                                        },
+                                                    ),
+                                                },
+                                            ],
+                                        }),
+                                    })),
+                                }],
+                            }),
+                            else_stmt: Some(Box::new(ast::Stmt::Block {
+                                stmts: vec![ast::Stmt::Return {
+                                    expr: Some(Box::new(ast::Expr::Integer {
+                                        value: 1,
+                                    })),
+                                }],
+                            })),
+                        }],
+                    }),
+                    else_stmt: Some(Box::new(ast::Stmt::Block {
+                        stmts: vec![ast::Stmt::Return {
+                            expr: Some(Box::new(ast::Expr::Integer {
+                                value: 1,
+                            })),
+                        }],
+                    })),
+                }],
+            },
         );
         let decl = ast::Declaration::Function(func);
         expected.push(decl);

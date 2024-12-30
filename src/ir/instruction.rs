@@ -1,149 +1,151 @@
-use super::{BasicBlock, Value};
+use super::{BasicBlock, Function, Value};
+use std::fmt;
 
-pub enum InstKind<'a> {
+pub enum InstKind<'ctx> {
     Alloca,
     // <0: val> -> *<1: ptr>
-    Store(&'a dyn Value, &'a dyn Value),
+    Store(&'ctx dyn Value, &'ctx dyn Value),
     // result := *<0: ptr>
-    Load(&'a dyn Value),
+    Load(&'ctx dyn Value),
 
     // result := <0: op0> + <1: op1>
-    Add(&'a dyn Value, &'a dyn Value),
+    Add(&'ctx dyn Value, &'ctx dyn Value),
     // result := <0: op0> - <1: op1>
-    Sub(&'a dyn Value, &'a dyn Value),
+    Sub(&'ctx dyn Value, &'ctx dyn Value),
     // result := <0: op0> * <1: op1>
-    Mul(&'a dyn Value, &'a dyn Value),
+    Mul(&'ctx dyn Value, &'ctx dyn Value),
     // result := <0: op0> / <1: op1>
-    Div(&'a dyn Value, &'a dyn Value),
+    Div(&'ctx dyn Value, &'ctx dyn Value),
 
     // goto <0: target>
-    Jump(&'a BasicBlock<'a>),
+    Jump(&'ctx BasicBlock<'ctx>),
     // if <0: cond> != $0 goto <1: target1> else goto <2: target2>
-    CJump(&'a dyn Value, &'a BasicBlock<'a>, &'a BasicBlock<'a>),
+    CJump(
+        &'ctx dyn Value,
+        &'ctx BasicBlock<'ctx>,
+        &'ctx BasicBlock<'ctx>,
+    ),
 
     // result := call <0: callee>(<1: args...>)
-    Call(String, Vec<&'a dyn Value>),
+    Call(&'ctx Function<'ctx>, Vec<&'ctx dyn Value>),
     // return <0: val?>
-    Return(Option<&'a dyn Value>),
+    Return(Option<&'ctx dyn Value>),
 }
 
-pub struct Instruction<'a> {
+pub struct Instruction<'ctx> {
     name: String,
-    inst: InstKind<'a>,
+    inst: InstKind<'ctx>,
 }
 
-impl<'a> Instruction<'a> {
-    pub fn alloca(name: String) -> Box<Instruction<'a>> {
-        Box::<Instruction>::new(Instruction {
+impl<'ctx> Instruction<'ctx> {
+    pub fn alloca(name: String) -> Self {
+        Self {
             name,
             inst: InstKind::Alloca,
-        })
+        }
     }
 
     pub fn store(
         name: String,
-        val: &'a dyn Value,
-        ptr: &'a dyn Value,
-    ) -> Box<Instruction<'a>> {
-        Box::<Instruction>::new(Instruction {
+        val: &'ctx dyn Value,
+        ptr: &'ctx dyn Value,
+    ) -> Self {
+        Self {
             name,
             inst: InstKind::Store(val, ptr),
-        })
+        }
     }
 
-    pub fn load(name: String, ptr: &'a dyn Value) -> Box<Instruction<'a>> {
-        Box::<Instruction>::new(Instruction {
+    pub fn load(name: String, ptr: &'ctx dyn Value) -> Self {
+        Self {
             name,
             inst: InstKind::Load(ptr),
-        })
+        }
     }
 
     pub fn add(
         name: String,
-        op0: &'a dyn Value,
-        op1: &'a dyn Value,
-    ) -> Box<Instruction<'a>> {
-        Box::<Instruction>::new(Instruction {
+        op0: &'ctx dyn Value,
+        op1: &'ctx dyn Value,
+    ) -> Self {
+        Self {
             name,
             inst: InstKind::Add(op0, op1),
-        })
+        }
     }
 
     pub fn sub(
         name: String,
-        op0: &'a dyn Value,
-        op1: &'a dyn Value,
-    ) -> Box<Instruction<'a>> {
-        Box::<Instruction>::new(Instruction {
+        op0: &'ctx dyn Value,
+        op1: &'ctx dyn Value,
+    ) -> Self {
+        Self {
             name,
             inst: InstKind::Sub(op0, op1),
-        })
+        }
     }
 
     pub fn mul(
         name: String,
-        op0: &'a dyn Value,
-        op1: &'a dyn Value,
-    ) -> Box<Instruction<'a>> {
-        Box::<Instruction>::new(Instruction {
+        op0: &'ctx dyn Value,
+        op1: &'ctx dyn Value,
+    ) -> Self {
+        Self {
             name,
             inst: InstKind::Mul(op0, op1),
-        })
+        }
     }
 
     pub fn div(
         name: String,
-        op0: &'a dyn Value,
-        op1: &'a dyn Value,
-    ) -> Box<Instruction<'a>> {
-        Box::<Instruction>::new(Instruction {
+        op0: &'ctx dyn Value,
+        op1: &'ctx dyn Value,
+    ) -> Self {
+        Self {
             name,
             inst: InstKind::Div(op0, op1),
-        })
+        }
     }
 
-    pub fn jump(name: String, target: &'a BasicBlock) -> Box<Instruction<'a>> {
-        Box::<Instruction>::new(Instruction {
+    pub fn jump(name: String, target: &'ctx BasicBlock<'ctx>) -> Self {
+        Self {
             name,
             inst: InstKind::Jump(target),
-        })
+        }
     }
 
     pub fn cjump(
         name: String,
-        cond: &'a dyn Value,
-        target1: &'a BasicBlock,
-        target2: &'a BasicBlock,
-    ) -> Box<Instruction<'a>> {
-        Box::<Instruction>::new(Instruction {
+        cond: &'ctx dyn Value,
+        target1: &'ctx BasicBlock<'ctx>,
+        target2: &'ctx BasicBlock<'ctx>,
+    ) -> Self {
+        Self {
             name,
             inst: InstKind::CJump(cond, target1, target2),
-        })
+        }
     }
 
     pub fn call(
         name: String,
-        callee: String,
-        args: Vec<&'a dyn Value>,
-    ) -> Box<Instruction<'a>> {
-        Box::<Instruction>::new(Instruction {
+        callee: &'ctx Function<'ctx>,
+        args: Vec<&'ctx dyn Value>,
+    ) -> Self {
+        Self {
             name,
             inst: InstKind::Call(callee, args),
-        })
+        }
     }
 
-    pub fn return_(
-        name: String,
-        val: Option<&'a dyn Value>,
-    ) -> Box<Instruction<'a>> {
-        Box::<Instruction>::new(Instruction {
+    pub fn ret(name: String, val: Option<&'ctx dyn Value>) -> Self {
+        Self {
             name,
             inst: InstKind::Return(val),
-        })
+        }
     }
 }
 
-impl<'a> Value for Instruction<'a> {
+impl<'ctx> Value for Instruction<'ctx> {
     fn name(&self) -> &str {
         &self.name
     }
@@ -152,6 +154,59 @@ impl<'a> Value for Instruction<'a> {
         match &self.inst {
             InstKind::Alloca => true,
             _ => false,
+        }
+    }
+}
+
+impl<'ctx> fmt::Display for Instruction<'ctx> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match &self.inst {
+            InstKind::Alloca => write!(f, "{} = alloca", self.name),
+            InstKind::Store(val, ptr) => {
+                write!(f, "store {}, {}", val.name(), ptr.name())
+            }
+            InstKind::Load(ptr) => {
+                write!(f, "{} = load {}", self.name, ptr.name())
+            }
+            InstKind::Add(op0, op1) => {
+                write!(f, "{} = add {}, {}", self.name, op0.name(), op1.name())
+            }
+            InstKind::Sub(op0, op1) => {
+                write!(f, "{} = sub {}, {}", self.name, op0.name(), op1.name())
+            }
+            InstKind::Mul(op0, op1) => {
+                write!(f, "{} = mul {}, {}", self.name, op0.name(), op1.name())
+            }
+            InstKind::Div(op0, op1) => {
+                write!(f, "{} = div {}, {}", self.name, op0.name(), op1.name())
+            }
+            InstKind::Jump(target) => write!(f, "jump {}", target.name()),
+            InstKind::CJump(cond, target1, target2) => {
+                write!(
+                    f,
+                    "cjump {}, {}, {}",
+                    cond.name(),
+                    target1.name(),
+                    target2.name()
+                )
+            }
+            InstKind::Call(callee, args) => {
+                write!(f, "{} = call @{}(", self.name, callee.name())?;
+                for (i, arg) in args.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", arg.name())?;
+                }
+                write!(f, ")")
+            }
+            InstKind::Return(val) => {
+                write!(f, "return")?;
+                if let Some(val) = val {
+                    write!(f, " {}", val.name())?;
+                }
+                Ok(())
+            }
         }
     }
 }
