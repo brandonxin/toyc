@@ -267,8 +267,16 @@ impl<'m> Codegen<'m> {
                     ast::UnaryOp::Neg => {
                         let zero = self.ctx.new_constant(0);
                         let sub = self.ctx.sub(zero, operand_val);
+                        func_ir.add_constant(zero);
                         func_ir.add_instruction(sub);
                         sub
+                    }
+                    ast::UnaryOp::BitwiseNot => {
+                        let neg1 = self.ctx.new_constant(u64::MAX);
+                        let not = self.ctx.xor(operand_val, neg1);
+                        func_ir.add_constant(neg1);
+                        func_ir.add_instruction(not);
+                        not
                     }
                     _ => unimplemented!(),
                 }
@@ -291,6 +299,31 @@ impl<'m> Codegen<'m> {
                         let store = self.ctx.store(rhs_val, lhs_val);
                         func_ir.add_instruction(store);
                         rhs_val
+                    }
+                    ast::BinaryOp::BitwiseOr => {
+                        let or = self.ctx.or(lhs_val, rhs_val);
+                        func_ir.add_instruction(or);
+                        or
+                    }
+                    ast::BinaryOp::BitwiseXor => {
+                        let xor = self.ctx.xor(lhs_val, rhs_val);
+                        func_ir.add_instruction(xor);
+                        xor
+                    }
+                    ast::BinaryOp::BitwiseAnd => {
+                        let and = self.ctx.and(lhs_val, rhs_val);
+                        func_ir.add_instruction(and);
+                        and
+                    }
+                    ast::BinaryOp::LShift => {
+                        let lshift = self.ctx.lshl(lhs_val, rhs_val);
+                        func_ir.add_instruction(lshift);
+                        lshift
+                    }
+                    ast::BinaryOp::RShift => {
+                        let rshift = self.ctx.ashr(lhs_val, rhs_val);
+                        func_ir.add_instruction(rshift);
+                        rshift
                     }
                     ast::BinaryOp::Eq => {
                         let eq = self.ctx.eq(lhs_val, rhs_val);

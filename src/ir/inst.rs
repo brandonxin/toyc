@@ -8,6 +8,13 @@ pub enum InstKind<'m> {
     // result := *<0: ptr>
     Load(&'m dyn Value),
 
+    Or(&'m dyn Value, &'m dyn Value),
+    Xor(&'m dyn Value, &'m dyn Value),
+    And(&'m dyn Value, &'m dyn Value),
+    LShl(&'m dyn Value, &'m dyn Value),
+    LShr(&'m dyn Value, &'m dyn Value),
+    AShr(&'m dyn Value, &'m dyn Value),
+
     Eq(&'m dyn Value, &'m dyn Value),
     Ne(&'m dyn Value, &'m dyn Value),
     Gt(&'m dyn Value, &'m dyn Value),
@@ -72,6 +79,48 @@ impl<'m> Inst<'m> {
         Self {
             name,
             inst: InstKind::Load(ptr),
+        }
+    }
+
+    pub fn or(name: String, op0: &'m dyn Value, op1: &'m dyn Value) -> Self {
+        Self {
+            name,
+            inst: InstKind::Or(op0, op1),
+        }
+    }
+
+    pub fn xor(name: String, op0: &'m dyn Value, op1: &'m dyn Value) -> Self {
+        Self {
+            name,
+            inst: InstKind::Xor(op0, op1),
+        }
+    }
+
+    pub fn and(name: String, op0: &'m dyn Value, op1: &'m dyn Value) -> Self {
+        Self {
+            name,
+            inst: InstKind::And(op0, op1),
+        }
+    }
+
+    pub fn lshl(name: String, op0: &'m dyn Value, op1: &'m dyn Value) -> Self {
+        Self {
+            name,
+            inst: InstKind::LShl(op0, op1),
+        }
+    }
+
+    pub fn lshr(name: String, op0: &'m dyn Value, op1: &'m dyn Value) -> Self {
+        Self {
+            name,
+            inst: InstKind::LShr(op0, op1),
+        }
+    }
+
+    pub fn ashr(name: String, op0: &'m dyn Value, op1: &'m dyn Value) -> Self {
+        Self {
+            name,
+            inst: InstKind::AShr(op0, op1),
         }
     }
 
@@ -205,6 +254,24 @@ impl fmt::Display for Inst<'_> {
             }
             InstKind::Load(ptr) => {
                 write!(f, "{} = load {}", self.name, ptr.name())
+            }
+            InstKind::Or(op0, op1) => {
+                write!(f, "{} = or {}, {}", self.name, op0.name(), op1.name())
+            }
+            InstKind::Xor(op0, op1) => {
+                write!(f, "{} = xor {}, {}", self.name, op0.name(), op1.name())
+            }
+            InstKind::And(op0, op1) => {
+                write!(f, "{} = and {}, {}", self.name, op0.name(), op1.name())
+            }
+            InstKind::LShl(op0, op1) => {
+                write!(f, "{} = lshl {}, {}", self.name, op0.name(), op1.name())
+            }
+            InstKind::LShr(op0, op1) => {
+                write!(f, "{} = lshr {}, {}", self.name, op0.name(), op1.name())
+            }
+            InstKind::AShr(op0, op1) => {
+                write!(f, "{} = ashr {}, {}", self.name, op0.name(), op1.name())
             }
             InstKind::Eq(op0, op1) => {
                 write!(f, "{} = eq {}, {}", self.name, op0.name(), op1.name())

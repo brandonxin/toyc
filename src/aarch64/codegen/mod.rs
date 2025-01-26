@@ -139,6 +139,9 @@ impl<'m, 'cg> FunctionCG<'m, 'cg> {
     }
 
     fn get_reg_or_imm(&self, val: &dyn ir::Value) -> RegOrImm<'m> {
+        // FIXME If the constant is too large, aarch64 instruction cannot accept it as
+        // an immediate operand. We need to split the constant and use a few more
+        // instructions to construct the value.
         match self.value_map.get(&val).unwrap() {
             Operand::Imm(i) => RegOrImm::Imm(*i),
             Operand::Reg(r) => RegOrImm::Reg(RefCell::new(r)),
@@ -188,7 +191,14 @@ impl<'m, 'cg> FunctionCG<'m, 'cg> {
                 self.emit(self.ctx.cmp(src1, src2));
                 self.emit(self.ctx.cset(dst, cc));
             }
-            ir::InstKind::Add(lhs, rhs) | ir::InstKind::Sub(lhs, rhs) => {
+            ir::InstKind::Add(lhs, rhs)
+            | ir::InstKind::Sub(lhs, rhs)
+            | ir::InstKind::Or(lhs, rhs)
+            | ir::InstKind::Xor(lhs, rhs)
+            | ir::InstKind::And(lhs, rhs)
+            | ir::InstKind::LShl(lhs, rhs)
+            | ir::InstKind::LShr(lhs, rhs)
+            | ir::InstKind::AShr(lhs, rhs) => {
                 let dst = self.new_vreg();
                 self.value_map.insert(inst, Operand::Reg(dst));
 
@@ -201,6 +211,28 @@ impl<'m, 'cg> FunctionCG<'m, 'cg> {
                     }
                     ir::InstKind::Sub(_, _) => {
                         self.emit(self.ctx.sub(dst, src1, src2));
+                    }
+                    ir::InstKind::Or(_, _) => {
+                        self.emit(self.ctx.orr(dst, src1, src2));
+                    }
+                    ir::InstKind::Xor(_, _) => {
+                        if let RegOrImm::Imm(u64::MAX) = src2 {
+                            self.emit(self.ctx.mvn(dst, src1));
+                        } else {
+                            self.emit(self.ctx.eor(dst, src1, src2));
+                        }
+                    }
+                    ir::InstKind::And(_, _) => {
+                        self.emit(self.ctx.and(dst, src1, src2));
+                    }
+                    ir::InstKind::LShl(_, _) => {
+                        self.emit(self.ctx.lsl(dst, src1, src2));
+                    }
+                    ir::InstKind::LShr(_, _) => {
+                        self.emit(self.ctx.lsr(dst, src1, src2));
+                    }
+                    ir::InstKind::AShr(_, _) => {
+                        self.emit(self.ctx.asr(dst, src1, src2));
                     }
                     _ => unreachable!(),
                 }

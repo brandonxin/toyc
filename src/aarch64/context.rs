@@ -106,6 +106,54 @@ impl<'m> Context<'m> {
         })
     }
 
+    pub fn orr(&self, dst: &'m Register, src1: &'m Register, src2: RegOrImm<'m>) -> &Inst<'m> {
+        self.inst.alloc(Inst::Orr {
+            dst: RefCell::new(dst),
+            src1: RefCell::new(src1),
+            src2,
+        })
+    }
+
+    pub fn eor(&self, dst: &'m Register, src1: &'m Register, src2: RegOrImm<'m>) -> &Inst<'m> {
+        self.inst.alloc(Inst::Eor {
+            dst: RefCell::new(dst),
+            src1: RefCell::new(src1),
+            src2,
+        })
+    }
+
+    pub fn and(&self, dst: &'m Register, src1: &'m Register, src2: RegOrImm<'m>) -> &Inst<'m> {
+        self.inst.alloc(Inst::And {
+            dst: RefCell::new(dst),
+            src1: RefCell::new(src1),
+            src2,
+        })
+    }
+
+    pub fn lsl(&self, dst: &'m Register, src1: &'m Register, src2: RegOrImm<'m>) -> &Inst<'m> {
+        self.inst.alloc(Inst::Lsl {
+            dst: RefCell::new(dst),
+            src1: RefCell::new(src1),
+            src2,
+        })
+    }
+
+    pub fn lsr(&self, dst: &'m Register, src1: &'m Register, src2: RegOrImm<'m>) -> &Inst<'m> {
+        self.inst.alloc(Inst::Lsr {
+            dst: RefCell::new(dst),
+            src1: RefCell::new(src1),
+            src2,
+        })
+    }
+
+    pub fn asr(&self, dst: &'m Register, src1: &'m Register, src2: RegOrImm<'m>) -> &Inst<'m> {
+        self.inst.alloc(Inst::Asr {
+            dst: RefCell::new(dst),
+            src1: RefCell::new(src1),
+            src2,
+        })
+    }
+
     pub fn add(&self, dst: &'m Register, src1: &'m Register, src2: RegOrImm<'m>) -> &Inst<'m> {
         self.inst.alloc(Inst::Add {
             dst: RefCell::new(dst),
@@ -150,6 +198,13 @@ impl<'m> Context<'m> {
             src1: RefCell::new(src1),
             src2: RefCell::new(src2),
             src3: RefCell::new(src3),
+        })
+    }
+
+    pub fn mvn(&self, dst: &'m Register, src: &'m Register) -> &Inst<'m> {
+        self.inst.alloc(Inst::Mvn {
+            dst: RefCell::new(dst),
+            src: RefCell::new(src),
         })
     }
 

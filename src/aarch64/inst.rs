@@ -46,6 +46,37 @@ pub enum Inst<'m> {
         src1: RefCell<&'m Register>,
         src2: RegOrImm<'m>,
     },
+
+    Orr {
+        dst: RefCell<&'m Register>,
+        src1: RefCell<&'m Register>,
+        src2: RegOrImm<'m>,
+    },
+    Eor {
+        dst: RefCell<&'m Register>,
+        src1: RefCell<&'m Register>,
+        src2: RegOrImm<'m>,
+    },
+    And {
+        dst: RefCell<&'m Register>,
+        src1: RefCell<&'m Register>,
+        src2: RegOrImm<'m>,
+    },
+    Lsl {
+        dst: RefCell<&'m Register>,
+        src1: RefCell<&'m Register>,
+        src2: RegOrImm<'m>,
+    },
+    Lsr {
+        dst: RefCell<&'m Register>,
+        src1: RefCell<&'m Register>,
+        src2: RegOrImm<'m>,
+    },
+    Asr {
+        dst: RefCell<&'m Register>,
+        src1: RefCell<&'m Register>,
+        src2: RegOrImm<'m>,
+    },
     Add {
         dst: RefCell<&'m Register>,
         src1: RefCell<&'m Register>,
@@ -71,6 +102,10 @@ pub enum Inst<'m> {
         src1: RefCell<&'m Register>,
         src2: RefCell<&'m Register>,
         src3: RefCell<&'m Register>,
+    },
+    Mvn {
+        dst: RefCell<&'m Register>,
+        src: RefCell<&'m Register>,
     },
 }
 
@@ -151,7 +186,14 @@ impl<'m> Inst<'m> {
             Self::Cset { dst, cond: _ } => {
                 Self::collect_vregs_from_reg(dst, written);
             }
-            Self::Add { dst, src1, src2 } | Self::Sub { dst, src1, src2 } => {
+            Self::Add { dst, src1, src2 }
+            | Self::Sub { dst, src1, src2 }
+            | Self::Orr { dst, src1, src2 }
+            | Self::Eor { dst, src1, src2 }
+            | Self::And { dst, src1, src2 }
+            | Self::Lsl { dst, src1, src2 }
+            | Self::Lsr { dst, src1, src2 }
+            | Self::Asr { dst, src1, src2 } => {
                 Self::collect_vregs_from_reg(dst, written);
                 Self::collect_vregs_from_reg(src1, read);
                 Self::collect_vregs_from_reg_or_imm(src2, read);
@@ -171,6 +213,10 @@ impl<'m> Inst<'m> {
                 Self::collect_vregs_from_reg(src1, read);
                 Self::collect_vregs_from_reg(src2, read);
                 Self::collect_vregs_from_reg(src3, read);
+            }
+            Self::Mvn { dst, src } => {
+                Self::collect_vregs_from_reg(dst, written);
+                Self::collect_vregs_from_reg(src, read);
             }
 
             Self::B { label: _ } | Self::Bl { callee: _ } | Self::Ret => {}
@@ -197,6 +243,24 @@ impl fmt::Display for Inst<'_> {
             Inst::Ret => write!(out, "ret")?,
             Inst::Cmp { src1, src2 } => write!(out, "cmp\t{}, {}", src1.borrow(), src2)?,
             Inst::Cset { dst, cond } => write!(out, "cset\t{}, {}", dst.borrow(), cond)?,
+            Inst::Orr { dst, src1, src2 } => {
+                write!(out, "orr\t{}, {}, {}", dst.borrow(), src1.borrow(), src2)?
+            }
+            Inst::Eor { dst, src1, src2 } => {
+                write!(out, "eor\t{}, {}, {}", dst.borrow(), src1.borrow(), src2)?
+            }
+            Inst::And { dst, src1, src2 } => {
+                write!(out, "and\t{}, {}, {}", dst.borrow(), src1.borrow(), src2)?
+            }
+            Inst::Lsl { dst, src1, src2 } => {
+                write!(out, "lsl\t{}, {}, {}", dst.borrow(), src1.borrow(), src2)?
+            }
+            Inst::Lsr { dst, src1, src2 } => {
+                write!(out, "lsr\t{}, {}, {}", dst.borrow(), src1.borrow(), src2)?
+            }
+            Inst::Asr { dst, src1, src2 } => {
+                write!(out, "asr\t{}, {}, {}", dst.borrow(), src1.borrow(), src2)?
+            }
             Inst::Add { dst, src1, src2 } => {
                 write!(out, "add\t{}, {}, {}", dst.borrow(), src1.borrow(), src2)?
             }
@@ -230,6 +294,7 @@ impl fmt::Display for Inst<'_> {
                 src2.borrow(),
                 src3.borrow()
             )?,
+            Inst::Mvn { dst, src } => write!(out, "mvn\t{}, {}", dst.borrow(), src.borrow())?,
         }
         Ok(())
     }
