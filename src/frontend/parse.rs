@@ -300,16 +300,58 @@ impl<D: Decode<R>, R: std::io::Read> Parser<D, R> {
         self.parse_bitwise_or()
     }
 
+    // Associativity: Left
+    // bitwise_or ::= bitwise_xor ('|' bitwise_xor)*
     fn parse_bitwise_or(&mut self) -> ast::Expr {
-        self.parse_bitwise_xor()
+        let mut lhs = self.parse_bitwise_xor();
+        loop {
+            if self.curr != Token::BitwiseOr {
+                return lhs;
+            }
+            self.get_next_token();
+
+            lhs = ast::Expr::Binary {
+                op: ast::BinaryOp::BitwiseOr,
+                lhs: Box::new(lhs),
+                rhs: Box::new(self.parse_bitwise_xor()),
+            };
+        }
     }
 
+    // Associativity: Left
+    // bitwise_xor ::= bitwise_and ('^' bitwise_and)*
     fn parse_bitwise_xor(&mut self) -> ast::Expr {
-        self.parse_bitwise_and()
+        let mut lhs = self.parse_bitwise_and();
+        loop {
+            if self.curr != Token::BitwiseXor {
+                return lhs;
+            }
+            self.get_next_token();
+
+            lhs = ast::Expr::Binary {
+                op: ast::BinaryOp::BitwiseXor,
+                lhs: Box::new(lhs),
+                rhs: Box::new(self.parse_bitwise_and()),
+            };
+        }
     }
 
+    // Associativity: Left
+    // bitwise_and ::= equality ('&' equality)*
     fn parse_bitwise_and(&mut self) -> ast::Expr {
-        self.parse_equality()
+        let mut lhs = self.parse_equality();
+        loop {
+            if self.curr != Token::BitwiseAnd {
+                return lhs;
+            }
+            self.get_next_token();
+
+            lhs = ast::Expr::Binary {
+                op: ast::BinaryOp::BitwiseAnd,
+                lhs: Box::new(lhs),
+                rhs: Box::new(self.parse_equality()),
+            };
+        }
     }
 
     // equality
@@ -347,13 +389,33 @@ impl<D: Decode<R>, R: std::io::Read> Parser<D, R> {
     //   ::= '<='
     //   ::= '>='
     fn parse_relational(&mut self) -> ast::Expr {
-        let mut lhs = self.parse_addition();
+        let mut lhs = self.parse_shift();
         loop {
             let op = match self.curr {
                 Token::Lt => ast::BinaryOp::Lt,
                 Token::Gt => ast::BinaryOp::Gt,
                 Token::Le => ast::BinaryOp::Le,
                 Token::Ge => ast::BinaryOp::Ge,
+                _ => return lhs,
+            };
+            self.get_next_token();
+
+            lhs = ast::Expr::Binary {
+                op,
+                lhs: Box::new(lhs),
+                rhs: Box::new(self.parse_shift()),
+            };
+        }
+    }
+
+    // Associativity: Left
+    // shift ::= addition (('<<' / '>>') addition)*
+    fn parse_shift(&mut self) -> ast::Expr {
+        let mut lhs = self.parse_addition();
+        loop {
+            let op = match self.curr {
+                Token::LShift => ast::BinaryOp::LShift,
+                Token::RShift => ast::BinaryOp::RShift,
                 _ => return lhs,
             };
             self.get_next_token();
@@ -672,5 +734,188 @@ mod tests {
         expected.push(decl);
 
         assert_eq!(unit, expected);
+    }
+
+    #[test]
+    fn bitwise_or() {
+        let src = String::from("a | b");
+        let mut parser = Parser::<Utf8Decoder<_>, _>::new(src.as_bytes());
+
+        parser.get_next_token();
+        let expr = parser.parse_expr();
+        assert_eq!(
+            expr,
+            ast::Expr::Binary {
+                op: ast::BinaryOp::BitwiseOr,
+                lhs: Box::new(ast::Expr::Variable {
+                    name: String::from("a")
+                }),
+                rhs: Box::new(ast::Expr::Variable {
+                    name: String::from("b")
+                })
+            }
+        )
+    }
+
+    #[test]
+    fn bitwise_or_associativity() {
+        let src = String::from("a | b | c");
+        let mut parser = Parser::<Utf8Decoder<_>, _>::new(src.as_bytes());
+
+        parser.get_next_token();
+        let expr = parser.parse_expr();
+        assert_eq!(
+            expr,
+            ast::Expr::Binary {
+                op: ast::BinaryOp::BitwiseOr,
+                lhs: Box::new(ast::Expr::Binary {
+                    op: ast::BinaryOp::BitwiseOr,
+                    lhs: Box::new(ast::Expr::Variable {
+                        name: String::from("a")
+                    }),
+                    rhs: Box::new(ast::Expr::Variable {
+                        name: String::from("b")
+                    })
+                }),
+                rhs: Box::new(ast::Expr::Variable {
+                    name: String::from("c")
+                })
+            }
+        )
+    }
+
+    #[test]
+    fn bitwise_or_and_precedence() {
+        let src = String::from("a | b & c");
+        let mut parser = Parser::<Utf8Decoder<_>, _>::new(src.as_bytes());
+
+        parser.get_next_token();
+        let expr = parser.parse_expr();
+        assert_eq!(
+            expr,
+            ast::Expr::Binary {
+                op: ast::BinaryOp::BitwiseOr,
+                lhs: Box::new(ast::Expr::Variable {
+                    name: String::from("a")
+                }),
+                rhs: Box::new(ast::Expr::Binary {
+                    op: ast::BinaryOp::BitwiseAnd,
+                    lhs: Box::new(ast::Expr::Variable {
+                        name: String::from("b")
+                    }),
+                    rhs: Box::new(ast::Expr::Variable {
+                        name: String::from("c")
+                    })
+                })
+            }
+        )
+    }
+
+    #[test]
+    fn bitwise_or_and_precedence2() {
+        let src = String::from("a | b & c & d");
+        let mut parser = Parser::<Utf8Decoder<_>, _>::new(src.as_bytes());
+
+        parser.get_next_token();
+        let expr = parser.parse_expr();
+        assert_eq!(
+            expr,
+            ast::Expr::Binary {
+                op: ast::BinaryOp::BitwiseOr,
+                lhs: Box::new(ast::Expr::Variable {
+                    name: String::from("a")
+                }),
+                rhs: Box::new(ast::Expr::Binary {
+                    op: ast::BinaryOp::BitwiseAnd,
+                    lhs: Box::new(ast::Expr::Binary {
+                        op: ast::BinaryOp::BitwiseAnd,
+                        lhs: Box::new(ast::Expr::Variable {
+                            name: String::from("b")
+                        }),
+                        rhs: Box::new(ast::Expr::Variable {
+                            name: String::from("c")
+                        })
+                    }),
+                    rhs: Box::new(ast::Expr::Variable {
+                        name: String::from("d")
+                    }),
+                })
+            }
+        )
+    }
+
+    #[test]
+    fn shift() {
+        let src = String::from("a << b");
+        let mut parser = Parser::<Utf8Decoder<_>, _>::new(src.as_bytes());
+
+        parser.get_next_token();
+        let expr = parser.parse_expr();
+        assert_eq!(
+            expr,
+            ast::Expr::Binary {
+                op: ast::BinaryOp::LShift,
+                lhs: Box::new(ast::Expr::Variable {
+                    name: String::from("a")
+                }),
+                rhs: Box::new(ast::Expr::Variable {
+                    name: String::from("b")
+                })
+            }
+        )
+    }
+
+    #[test]
+    fn shift2() {
+        let src = String::from("a << b >> c");
+        let mut parser = Parser::<Utf8Decoder<_>, _>::new(src.as_bytes());
+
+        parser.get_next_token();
+        let expr = parser.parse_expr();
+        assert_eq!(
+            expr,
+            ast::Expr::Binary {
+                op: ast::BinaryOp::RShift,
+                lhs: Box::new(ast::Expr::Binary {
+                    op: ast::BinaryOp::LShift,
+                    lhs: Box::new(ast::Expr::Variable {
+                        name: String::from("a")
+                    }),
+                    rhs: Box::new(ast::Expr::Variable {
+                        name: String::from("b")
+                    })
+                }),
+                rhs: Box::new(ast::Expr::Variable {
+                    name: String::from("c")
+                })
+            }
+        )
+    }
+
+    #[test]
+    fn shift3() {
+        let src = String::from("a << b << c");
+        let mut parser = Parser::<Utf8Decoder<_>, _>::new(src.as_bytes());
+
+        parser.get_next_token();
+        let expr = parser.parse_expr();
+        assert_eq!(
+            expr,
+            ast::Expr::Binary {
+                op: ast::BinaryOp::LShift,
+                lhs: Box::new(ast::Expr::Binary {
+                    op: ast::BinaryOp::LShift,
+                    lhs: Box::new(ast::Expr::Variable {
+                        name: String::from("a")
+                    }),
+                    rhs: Box::new(ast::Expr::Variable {
+                        name: String::from("b")
+                    })
+                }),
+                rhs: Box::new(ast::Expr::Variable {
+                    name: String::from("c")
+                }),
+            }
+        )
     }
 }

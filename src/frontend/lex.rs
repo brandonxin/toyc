@@ -87,6 +87,8 @@ impl<D: Decode<R>, R: std::io::Read> Lexer<D, R> {
                 self.last = self.getchar().unwrap_or(' ');
                 if self.last == '=' {
                     Token::Ge
+                } else if self.last == '>' {
+                    Token::RShift
                 } else {
                     should_get_next = false;
                     Token::Gt
@@ -96,9 +98,30 @@ impl<D: Decode<R>, R: std::io::Read> Lexer<D, R> {
                 self.last = self.getchar().unwrap_or(' ');
                 if self.last == '=' {
                     Token::Le
+                } else if self.last == '<' {
+                    Token::LShift
                 } else {
                     should_get_next = false;
                     Token::Lt
+                }
+            }
+            '|' => {
+                self.last = self.getchar().unwrap_or(' ');
+                if self.last == '|' {
+                    Token::LogicalOr
+                } else {
+                    should_get_next = false;
+                    Token::BitwiseOr
+                }
+            }
+            '^' => Token::BitwiseXor,
+            '&' => {
+                self.last = self.getchar().unwrap_or(' ');
+                if self.last == '&' {
+                    Token::LogicalAnd
+                } else {
+                    should_get_next = false;
+                    Token::BitwiseAnd
                 }
             }
             '+' => Token::Add,

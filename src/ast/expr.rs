@@ -32,12 +32,19 @@ pub enum UnaryOp {
 pub enum BinaryOp {
     Assignment,
 
+    BitwiseOr,
+    BitwiseXor,
+    BitwiseAnd,
+
     Eq,
     Ne,
     Gt,
     Ge,
     Lt,
     Le,
+
+    LShift,
+    RShift,
 
     Add,
     Sub,

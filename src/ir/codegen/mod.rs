@@ -347,6 +347,7 @@ impl<'m> Codegen<'m> {
                         func_ir.add_instruction(modulo);
                         modulo
                     }
+                    _ => unimplemented!(),
                 }
             }
             ast::Expr::Call { callee, arguments } => {

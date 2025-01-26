@@ -14,12 +14,22 @@ pub enum Token {
 
     Assign,
 
+    LogicalOr,
+    LogicalAnd,
+
+    BitwiseOr,
+    BitwiseXor,
+    BitwiseAnd,
+
     Eq,
     Ne,
     Gt,
     Ge,
     Lt,
     Le,
+
+    LShift,
+    RShift,
 
     Add,
     Sub,
