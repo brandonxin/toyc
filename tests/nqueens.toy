@@ -1,0 +1,23 @@
+func helper(row: Int64, ld: Int64, rd: Int64, upperlim: Int64) : Int64  
+{  
+    if row == upperlim {
+        return 1;
+    }
+
+    var pos: Int64;
+    var p: Int64;
+    var ans: Int64 = 0;
+    pos = upperlim & (~(row | ld | rd ));  
+    
+    while pos {
+        p = pos & (~pos + 1);  
+        pos = pos - p;  
+        ans = ans + helper(row | p, (ld | p) << 1, (rd | p) >> 1, upperlim);  
+    }  
+
+    return ans;
+}
+
+func nqueens(n: Int64) : Int64 {
+    return helper(0, 0, 0, (1 << n) - 1);
+}

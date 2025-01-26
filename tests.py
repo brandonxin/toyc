@@ -80,3 +80,12 @@ def test_gcd1():
 
 def test_gcd2():
     run("gcd", "gcd2.toy", "gcd.c", gcd_ans)
+
+
+def test_nqueens():
+    run(
+        "nqueens",
+        "nqueens.toy",
+        "nqueens.c",
+        "1\n0\n0\n2\n10\n4\n40\n92\n352\n724\n2680\n14200\n",
+    )
