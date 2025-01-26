@@ -1,0 +1,7 @@
+func gcd(a: Int64, b: Int64) : Int64 {
+    if b == 0 {
+        return a;
+    } else {
+        return gcd(b, a % b);
+    }
+}

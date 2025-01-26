@@ -1,0 +1,9 @@
+func gcd(a: Int64, b: Int64) : Int64 {
+    var temp: Int64 = 0;
+    while b != 0 {
+        temp = b;
+        b = a % b;
+        a = temp;
+    }
+    return a;
+}

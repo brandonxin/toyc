@@ -1,0 +1,16 @@
+func fib(n: Int64) : Int64 {
+    if n < 2 {
+        return 1;
+    }
+
+    var a : Int64 = 1;
+    var b : Int64 = 1;
+    var i : Int64 = 2;
+    while i <= n {
+        var c : Int64 = a + b;
+        a = b;
+        b = c;
+        i = i + 1;   
+    }
+    return b;
+}
