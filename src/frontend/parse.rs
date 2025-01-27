@@ -121,7 +121,13 @@ impl<D: Decode<R>, R: std::io::Read> Parser<D, R> {
         self.get_next_token();
         ast::FuncDecl::new(func_name, return_type, parameters)
     }
-
+    // stmt : block
+    //      | if
+    //      | while
+    //      | var_decl
+    //      | return
+    //      | expr ';'
+    //      | ';'
     fn parse_stmt(&mut self) -> Option<ast::Stmt> {
         match self.curr {
             Token::LBrace => Some(self.parse_block_stmt()),
@@ -137,7 +143,7 @@ impl<D: Decode<R>, R: std::io::Read> Parser<D, R> {
         }
     }
 
-    // block ::= '{' stmt* '}'
+    // block : '{' stmt* '}'
     fn parse_block_stmt(&mut self) -> ast::Stmt {
         self.get_next_token();
 
@@ -153,9 +159,8 @@ impl<D: Decode<R>, R: std::io::Read> Parser<D, R> {
         ast::Stmt::Block { stmts }
     }
 
-    // ifstmt
-    //   ::= 'if' expr block
-    //   ::= 'if' expr block else block
+    // if : 'if' expr block
+    //    | 'if' expr block 'else' block
     fn parse_if_stmt(&mut self) -> ast::Stmt {
         self.get_next_token();
 
@@ -188,7 +193,7 @@ impl<D: Decode<R>, R: std::io::Read> Parser<D, R> {
         }
     }
 
-    // whilestmt ::= 'while' expr block
+    // while : 'while' expr block
     fn parse_while_stmt(&mut self) -> ast::Stmt {
         self.get_next_token();
 
@@ -202,7 +207,7 @@ impl<D: Decode<R>, R: std::io::Read> Parser<D, R> {
         ast::Stmt::While { cond, body }
     }
 
-    // varstmt ::= 'var' identifier ':' identifier ('=' expr)? ';'
+    // var_decl : 'var' identifier ':' type ( '=' expr )? ';'
     fn parse_var_decl_stmt(&mut self) -> ast::Stmt {
         self.get_next_token();
 
@@ -245,7 +250,7 @@ impl<D: Decode<R>, R: std::io::Read> Parser<D, R> {
         }
     }
 
-    // returnstmt ::= 'return' expr? ';'
+    // return : 'return' expr? ';'
     fn parse_return_stmt(&mut self) -> ast::Stmt {
         self.get_next_token();
 
@@ -264,7 +269,7 @@ impl<D: Decode<R>, R: std::io::Read> Parser<D, R> {
         ast::Stmt::Return { expr }
     }
 
-    // exprstmt ::= expr ';'
+    // expr_stmt : expr ';'
     fn parse_expr_stmt(&mut self) -> ast::Stmt {
         let expr = Box::new(self.parse_expr());
 
@@ -277,13 +282,13 @@ impl<D: Decode<R>, R: std::io::Read> Parser<D, R> {
         ast::Stmt::ExprStmt { expr }
     }
 
-    // expression
-    //   ::= assignment
+    // expr : assignment
     fn parse_expr(&mut self) -> ast::Expr {
         self.parse_assignment()
     }
 
-    // assignment ::= logical_or ('=' assignment)?
+    // right-associative
+    // assignment : logical_or ( '=' assignment )?
     fn parse_assignment(&mut self) -> ast::Expr {
         let lhs = self.parse_logical_or();
 
@@ -300,16 +305,18 @@ impl<D: Decode<R>, R: std::io::Read> Parser<D, R> {
         }
     }
 
+    // unimplemented
     fn parse_logical_or(&mut self) -> ast::Expr {
         self.parse_logical_and()
     }
 
+    // unimplemented
     fn parse_logical_and(&mut self) -> ast::Expr {
         self.parse_bitwise_or()
     }
 
-    // Associativity: Left
-    // bitwise_or ::= bitwise_xor ('|' bitwise_xor)*
+    // left-associative
+    // bitwise_or : bitwise_xor ('|' bitwise_xor)*
     fn parse_bitwise_or(&mut self) -> ast::Expr {
         let mut lhs = self.parse_bitwise_xor();
         loop {
@@ -326,8 +333,8 @@ impl<D: Decode<R>, R: std::io::Read> Parser<D, R> {
         }
     }
 
-    // Associativity: Left
-    // bitwise_xor ::= bitwise_and ('^' bitwise_and)*
+    // left-associative
+    // bitwise_xor : bitwise_and ( '^' bitwise_and )*
     fn parse_bitwise_xor(&mut self) -> ast::Expr {
         let mut lhs = self.parse_bitwise_and();
         loop {
@@ -344,8 +351,8 @@ impl<D: Decode<R>, R: std::io::Read> Parser<D, R> {
         }
     }
 
-    // Associativity: Left
-    // bitwise_and ::= equality ('&' equality)*
+    // left-associative
+    // bitwise_and : equality ( '&' equality )*
     fn parse_bitwise_and(&mut self) -> ast::Expr {
         let mut lhs = self.parse_equality();
         loop {
@@ -362,11 +369,10 @@ impl<D: Decode<R>, R: std::io::Read> Parser<D, R> {
         }
     }
 
-    // equality ::= relational (equality_op relational)*
-    //
-    // equality_op
-    //  ::= '=='
-    //  ::= '!='
+    // left-associative
+    // equality    : relational ( equality_op relational )*
+    // equality_op : '=='
+    //             | '!='
     fn parse_equality(&mut self) -> ast::Expr {
         let mut lhs = self.parse_relational();
         loop {
@@ -385,13 +391,12 @@ impl<D: Decode<R>, R: std::io::Read> Parser<D, R> {
         }
     }
 
-    // relational ::= shift (relational_op shift)*
-    //
-    // relational_op
-    //   ::= '<'
-    //   ::= '>'
-    //   ::= '<='
-    //   ::= '>='
+    // left-associative
+    // relational    : shift ( relational_op shift )*
+    // relational_op : '<'
+    //               | '<='
+    //               | '>'
+    //               | '>='
     fn parse_relational(&mut self) -> ast::Expr {
         let mut lhs = self.parse_shift();
         loop {
@@ -412,8 +417,10 @@ impl<D: Decode<R>, R: std::io::Read> Parser<D, R> {
         }
     }
 
-    // Associativity: Left
-    // shift ::= addition (('<<' / '>>') addition)*
+    // left-associative
+    // shift   : addition ( shift_op addition )*
+    // shift_op: '<<'
+    //         | '>>'
     fn parse_shift(&mut self) -> ast::Expr {
         let mut lhs = self.parse_addition();
         loop {
@@ -432,7 +439,10 @@ impl<D: Decode<R>, R: std::io::Read> Parser<D, R> {
         }
     }
 
-    // expr ::= multiplication ( ('+' / '-') multiplication)*
+    // left-associative
+    // addition    : multiplication ( addition_op multiplication )*
+    // addition_op : '+'
+    //             | '-'
     fn parse_addition(&mut self) -> ast::Expr {
         let mut lhs = self.parse_multiplication();
         loop {
@@ -451,7 +461,11 @@ impl<D: Decode<R>, R: std::io::Read> Parser<D, R> {
         }
     }
 
-    // expr ::= unary ( ('*' / '/' / '%') unary)*
+    // left-associative
+    // multiplication    : unary ( multiplication_op unary )*
+    // multiplication_op : '*'
+    //                   | '/'
+    //                   | '%'
     fn parse_multiplication(&mut self) -> ast::Expr {
         let mut lhs = self.parse_unary();
         loop {
@@ -471,11 +485,12 @@ impl<D: Decode<R>, R: std::io::Read> Parser<D, R> {
         }
     }
 
-    // unary
-    //   ::= primary
-    //   ::= '~' unary
-    //   ::= '!' unary
-    //   ::= '-' unary
+    // unary : primary
+    //       | '~' unary
+    //       | '!' unary
+    //       | '-' unary
+    //       | '&' unary # unimplemented
+    //       | '*' unary # unimplemented
     fn parse_unary(&mut self) -> ast::Expr {
         let op = match self.curr {
             Token::BitwiseNot => ast::UnaryOp::BitwiseNot,
@@ -491,10 +506,9 @@ impl<D: Decode<R>, R: std::io::Read> Parser<D, R> {
         }
     }
 
-    // primary
-    //   ::= identifierexpr
-    //   ::= numberexpr
-    //   ::= parenexpr
+    // primary : identifier_expr
+    //         | number_expr
+    //         | paren_expr
     fn parse_primary(&mut self) -> ast::Expr {
         match self.curr {
             Token::Identifier(_) => self.parse_identifier_expr(),
@@ -504,9 +518,8 @@ impl<D: Decode<R>, R: std::io::Read> Parser<D, R> {
         }
     }
 
-    // identifierexpr
-    //   ::= identifier
-    //   ::= identifier '(' expression* ')'
+    // identifier_expr : identifier '(' expr ( ',' expr )* ','? ')'
+    //                 | identifier
     fn parse_identifier_expr(&mut self) -> ast::Expr {
         let name = if let Token::Identifier(ref s) = self.curr {
             s.clone()
@@ -541,7 +554,7 @@ impl<D: Decode<R>, R: std::io::Read> Parser<D, R> {
         }
     }
 
-    // parenexpr ::= '(' expression ')'
+    // parenexpr : '(' expr ')'
     fn parse_paren_expr(&mut self) -> ast::Expr {
         self.get_next_token();
         let expr = self.parse_expr();
@@ -552,7 +565,7 @@ impl<D: Decode<R>, R: std::io::Read> Parser<D, R> {
         expr
     }
 
-    // numberexpr ::= number
+    // number_expr : number
     fn parse_number_expr(&mut self) -> ast::Expr {
         let number = if let Token::Integer(n) = self.curr {
             n

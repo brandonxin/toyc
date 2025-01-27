@@ -30,54 +30,54 @@ var_decl          : 'var'    identifier ':' type ( '=' expr )? ';'
 
 return            : 'return' expr? ';'
 
-type              : '*' type                               // unimplemented
-                  | '[' type ']'                           // unimplemented
-                  | '[' type ';' number ']'                // unimplemented
+type              : '*' type                               # unimplemented
+                  | '[' type ']'                           # unimplemented
+                  | '[' type ';' number ']'                # unimplemented
                   | identifier
 
 expr              : assignment
 
-assignment        : logical_or  ( '=' assignment )?        // right-associative
+assignment        : logical_or  ( '=' assignment )?        # right-associative
 
-logical_or        : logical_and                            // unimplemented
+logical_or        : logical_and                            # unimplemented
 
-logical_and       : bitwise_or                             // unimplemented
+logical_and       : bitwise_or                             # unimplemented
 
-bitwise_or        : bitwise_xor ( '|' bitwise_xor )*       // left-associative
+bitwise_or        : bitwise_xor ( '|' bitwise_xor )*       # left-associative
 
-bitwise_xor       : bitwise_and ( '^' bitwise_and )*       // left-associative
+bitwise_xor       : bitwise_and ( '^' bitwise_and )*       # left-associative
 
-bitwise_and       : equality ( '&' equality )*             // left-associative
+bitwise_and       : equality ( '&' equality )*             # left-associative
 
-equality          : relational ( equality_op relational )* // left-associative
+equality          : relational ( equality_op relational )* # left-associative
 equality_op       : '=='
                   | '!='
 
-relational        : addition ( relational_op addition )*   // left-associative
+relational        : addition ( relational_op addition )*   # left-associative
 relational_op     : '<'
                   | '<='
                   | '>'
                   | '>='
 
-shift             : addition ( shift_op addition )*        // left-associative
+shift             : addition ( shift_op addition )*        # left-associative
 shift_op          : '<<'
                   | '>>'
 
-addition          : multiplication ( addition_op multiplication )* // left-associative
+addition          : multiplication ( addition_op multiplication )* # left-associative
 addition_op       : '+'
                   | '-'
 
-multiplication    : unary ( multiplication_op unary )*     // left-associative
+multiplication    : unary ( multiplication_op unary )*     # left-associative
 multiplication_op : '*' 
                   | '/'
                   | '%'
 
 unary             :     primary
-                  | '~' unary   // right-associative, unimplemented
-                  | '!' unary   // right-associative
-                  | '-' unary   // right-associative
-                  | '&' unary   // right-associative, unimplemented
-                  | '*' unary   // right-associative, unimplemented
+                  | '~' unary   # right-associative
+                  | '!' unary   # right-associative, unimplemented
+                  | '-' unary   # right-associative
+                  | '&' unary   # right-associative, unimplemented
+                  | '*' unary   # right-associative, unimplemented
 
 primary           : identifier_expr
                   | number_expr
