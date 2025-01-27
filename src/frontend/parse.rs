@@ -17,20 +17,23 @@ impl<D: Decode<R>, R: std::io::Read> Parser<D, R> {
         }
     }
 
+    // root : function
+    //      | extern
     pub fn parse(&mut self, unit: &mut ast::Module) {
         self.get_next_token();
         loop {
             match self.curr {
                 Token::EOF => return,
                 Token::SemiColon => self.get_next_token(),
-                Token::Func => self.parse_function(unit),
-                Token::Extern => self.parse_extern(unit),
+                Token::Func => unit.push(ast::GlobalDecl::Function(self.parse_function())),
+                Token::Extern => unit.push(ast::GlobalDecl::FuncDecl(self.parse_extern())),
                 _ => panic!("unexpected token"),
             }
         }
     }
 
-    fn parse_function(&mut self, unit: &mut ast::Module) {
+    // function : 'func' func_decl body
+    fn parse_function(&mut self) -> ast::Func {
         // eat 'func'
         self.get_next_token();
 
@@ -41,22 +44,27 @@ impl<D: Decode<R>, R: std::io::Read> Parser<D, R> {
         }
         let body = self.parse_block_stmt();
 
-        let func = ast::Func::new(proto, body);
-        let decl = ast::GlobalDecl::Function(func);
-
-        unit.push(decl);
+        ast::Func::new(proto, body)
     }
 
-    fn parse_extern(&mut self, unit: &mut ast::Module) {
+    // extern : 'extern' func_decl ';'
+    fn parse_extern(&mut self) -> ast::FuncDecl {
         // Eat 'extern'
         self.get_next_token();
 
-        let proto = self.parse_func_decl();
-        let decl = ast::GlobalDecl::FuncDecl(proto);
+        let decl = self.parse_func_decl();
 
-        unit.push(decl);
+        if self.curr != Token::SemiColon {
+            panic!("expected ';'");
+        }
+        self.get_next_token();
+
+        decl
     }
 
+    // func_decl : identifier '(' params ')' ( ':' type )?
+    // params    : ( param ( ',' param )* ','? )?
+    // param     : identifier ':' type
     fn parse_func_decl(&mut self) -> ast::FuncDecl {
         let func_name = if let Token::Identifier(ref s) = self.curr {
             s.clone()
@@ -354,9 +362,7 @@ impl<D: Decode<R>, R: std::io::Read> Parser<D, R> {
         }
     }
 
-    // equality
-    //  ::= relational
-    //  ::= relational (equality_op comparison)*
+    // equality ::= relational (equality_op relational)*
     //
     // equality_op
     //  ::= '=='
@@ -379,9 +385,7 @@ impl<D: Decode<R>, R: std::io::Read> Parser<D, R> {
         }
     }
 
-    // relational
-    //   ::= addition
-    //   ::= addition (relational_op addition)*
+    // relational ::= shift (relational_op shift)*
     //
     // relational_op
     //   ::= '<'
@@ -734,6 +738,52 @@ mod tests {
         expected.push(decl);
 
         assert_eq!(unit, expected);
+    }
+
+    #[test]
+    fn extern_func() {
+        let src = r"extern foo(a: Int64, b: Int64): Int64;".to_owned();
+        let mut parser = Parser::<Utf8Decoder<_>, _>::new(src.as_bytes());
+
+        parser.get_next_token();
+
+        let decl = parser.parse_extern();
+        assert_eq!(
+            decl,
+            ast::FuncDecl::new(
+                String::from("foo"),
+                String::from("Int64"),
+                vec![
+                    ast::Param::new(String::from("a"), String::from("Int64")),
+                    ast::Param::new(String::from("b"), String::from("Int64")),
+                ]
+            )
+        );
+    }
+
+    #[test]
+    fn extern_func2() {
+        let src = r"extern foo(a: Int64, b: Int64): Int64;
+extern foo(a: Int64, b: Int64): Int64;"
+            .to_owned();
+        let mut parser = Parser::<Utf8Decoder<_>, _>::new(src.as_bytes());
+
+        parser.get_next_token();
+
+        for _ in 0..2 {
+            let decl = parser.parse_extern();
+            assert_eq!(
+                decl,
+                ast::FuncDecl::new(
+                    String::from("foo"),
+                    String::from("Int64"),
+                    vec![
+                        ast::Param::new(String::from("a"), String::from("Int64")),
+                        ast::Param::new(String::from("b"), String::from("Int64")),
+                    ]
+                )
+            );
+        }
     }
 
     #[test]
