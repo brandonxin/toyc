@@ -26,6 +26,8 @@ pub enum UnaryOp {
     Neg,
     BitwiseNot,
     LogicalNot,
+    AddrOf,
+    Deref,
 }
 
 #[derive(PartialEq, Eq, Debug)]

@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use super::char::Decode;
 use super::lex::Lexer;
 use super::token::Token;
@@ -81,20 +83,16 @@ impl<D: Decode<R>, R: std::io::Read> Parser<D, R> {
 
         let mut parameters = Vec::<ast::Param>::new();
         while let Token::Identifier(param_name) = self.curr.clone() {
-            self.get_next_token();
+            self.get_next_token(); // Eat parameter name, move to ':'
+
             if self.curr != Token::Colon {
                 panic!("expected ':' after parameter name");
             }
+            self.get_next_token(); // Eat ':', move to type
 
-            self.get_next_token();
-            let type_name = if let Token::Identifier(ref s) = self.curr {
-                s.clone()
-            } else {
-                panic!("expected type after ':'");
-            };
-            parameters.push(ast::Param::new(param_name, type_name));
+            let ty = self.parse_type();
+            parameters.push(ast::Param::new(param_name, ty));
 
-            self.get_next_token();
             match self.curr {
                 Token::Comma => self.get_next_token(),
                 Token::RParen => break,
@@ -105,22 +103,17 @@ impl<D: Decode<R>, R: std::io::Read> Parser<D, R> {
         if self.curr != Token::RParen {
             panic!("expected ')");
         }
+        self.get_next_token(); // Eat ')'
 
-        self.get_next_token();
         if self.curr != Token::Colon {
-            return ast::FuncDecl::new(func_name, String::from("void"), parameters);
+            return ast::FuncDecl::new(func_name, ast::TypeExpr::Void, parameters);
         }
+        self.get_next_token(); // Eat ':'
 
-        self.get_next_token();
-        let return_type = if let Token::Identifier(ref s) = self.curr {
-            s.clone()
-        } else {
-            panic!("expected return type");
-        };
-
-        self.get_next_token();
-        ast::FuncDecl::new(func_name, return_type, parameters)
+        let ty = self.parse_type();
+        ast::FuncDecl::new(func_name, ty, parameters)
     }
+
     // stmt : block
     //      | if
     //      | while
@@ -209,27 +202,22 @@ impl<D: Decode<R>, R: std::io::Read> Parser<D, R> {
 
     // var_decl : 'var' identifier ':' type ( '=' expr )? ';'
     fn parse_var_decl_stmt(&mut self) -> ast::Stmt {
-        self.get_next_token();
+        self.get_next_token(); // Eat 'var'
 
         let var_name = if let Token::Identifier(ref s) = self.curr {
             s.clone()
         } else {
             panic!("expected variable name");
         };
+        self.get_next_token(); // Eat variable name
 
-        self.get_next_token();
         if self.curr != Token::Colon {
             panic!("expected ':'");
         }
+        self.get_next_token(); // Eat ':'
 
-        self.get_next_token();
-        let type_name = if let Token::Identifier(ref s) = self.curr {
-            s.clone()
-        } else {
-            panic!("expected type name");
-        };
+        let ty = self.parse_type();
 
-        self.get_next_token();
         let expr = if self.curr == Token::Assign {
             self.get_next_token();
             Some(Box::new(self.parse_expr()))
@@ -240,12 +228,11 @@ impl<D: Decode<R>, R: std::io::Read> Parser<D, R> {
         if self.curr != Token::SemiColon {
             panic!("expected ';'");
         }
-
-        self.get_next_token();
+        self.get_next_token(); // Eat ';'
 
         ast::Stmt::VarDecl {
-            var_name,
-            type_name,
+            name: var_name,
+            ty: Rc::new(ty),
             expr,
         }
     }
@@ -267,6 +254,28 @@ impl<D: Decode<R>, R: std::io::Read> Parser<D, R> {
         self.get_next_token();
 
         ast::Stmt::Return { expr }
+    }
+
+    // type : '*' type
+    //      | '[' type ']'            # unimplemented
+    //      | '[' type ';' number ']' # unimplemented
+    //      | identifier
+    fn parse_type(&mut self) -> ast::TypeExpr {
+        match self.curr {
+            Token::Mul => {
+                self.get_next_token();
+                ast::TypeExpr::Pointer(Rc::new(self.parse_type()))
+            }
+            Token::Identifier(ref val) => {
+                if val == "Int64" {
+                    self.get_next_token();
+                    ast::TypeExpr::Int64
+                } else {
+                    panic!("unexpected token");
+                }
+            }
+            _ => panic!("unexpected token"),
+        }
     }
 
     // expr_stmt : expr ';'
@@ -486,16 +495,18 @@ impl<D: Decode<R>, R: std::io::Read> Parser<D, R> {
     }
 
     // unary : primary
-    //       | '~' unary
-    //       | '!' unary
-    //       | '-' unary
-    //       | '&' unary # unimplemented
-    //       | '*' unary # unimplemented
+    //       | '~' unary // right-associative
+    //       | '!' unary // right-associative
+    //       | '-' unary // right-associative
+    //       | '&' unary // right-associative
+    //       | '*' unary // right-associative
     fn parse_unary(&mut self) -> ast::Expr {
         let op = match self.curr {
             Token::BitwiseNot => ast::UnaryOp::BitwiseNot,
             Token::LogicalNot => ast::UnaryOp::LogicalNot,
             Token::Sub => ast::UnaryOp::Neg,
+            Token::BitwiseAnd => ast::UnaryOp::AddrOf,
+            Token::Mul => ast::UnaryOp::Deref,
             _ => return self.parse_primary(),
         };
 
@@ -589,6 +600,29 @@ mod tests {
     use super::*;
 
     #[test]
+    fn parse_pointer() {
+        let src = "*Int64".to_owned();
+        let mut parser = Parser::<Utf8Decoder<_>, _>::new(src.as_bytes());
+
+        parser.get_next_token();
+        let ty = parser.parse_type();
+        assert_eq!(ty, TypeExpr::Pointer(Rc::new(TypeExpr::Int64)));
+    }
+
+    #[test]
+    fn parse_pointer2() {
+        let src = "**Int64".to_owned();
+        let mut parser = Parser::<Utf8Decoder<_>, _>::new(src.as_bytes());
+
+        parser.get_next_token();
+        let ty = parser.parse_type();
+        assert_eq!(
+            ty,
+            TypeExpr::Pointer(Rc::new(TypeExpr::Pointer(Rc::new(TypeExpr::Int64))))
+        );
+    }
+
+    #[test]
     fn fib() {
         let src = String::from(
             r"func fib(n: Int64) : Int64 {
@@ -614,8 +648,8 @@ mod tests {
         let func = Func::new(
             ast::FuncDecl::new(
                 String::from("fib"),
-                String::from("Int64"),
-                vec![ast::Param::new(String::from("n"), String::from("Int64"))],
+                TypeExpr::Int64,
+                vec![ast::Param::new(String::from("n"), TypeExpr::Int64)],
             ),
             ast::Stmt::Block {
                 stmts: vec![ast::Stmt::IfElse {
@@ -700,8 +734,8 @@ mod tests {
         let func = Func::new(
             ast::FuncDecl::new(
                 String::from("fib"),
-                String::from("Int64"),
-                vec![ast::Param::new(String::from("n"), String::from("Int64"))],
+                TypeExpr::Int64,
+                vec![ast::Param::new(String::from("n"), TypeExpr::Int64)],
             ),
             ast::Stmt::Block {
                 stmts: vec![ast::Stmt::IfElse {
@@ -765,10 +799,10 @@ mod tests {
             decl,
             ast::FuncDecl::new(
                 String::from("foo"),
-                String::from("Int64"),
+                TypeExpr::Int64,
                 vec![
-                    ast::Param::new(String::from("a"), String::from("Int64")),
-                    ast::Param::new(String::from("b"), String::from("Int64")),
+                    ast::Param::new(String::from("a"), TypeExpr::Int64),
+                    ast::Param::new(String::from("b"), TypeExpr::Int64),
                 ]
             )
         );
@@ -789,10 +823,10 @@ extern foo(a: Int64, b: Int64): Int64;"
                 decl,
                 ast::FuncDecl::new(
                     String::from("foo"),
-                    String::from("Int64"),
+                    TypeExpr::Int64,
                     vec![
-                        ast::Param::new(String::from("a"), String::from("Int64")),
-                        ast::Param::new(String::from("b"), String::from("Int64")),
+                        ast::Param::new(String::from("a"), TypeExpr::Int64),
+                        ast::Param::new(String::from("b"), TypeExpr::Int64),
                     ]
                 )
             );
@@ -978,6 +1012,24 @@ extern foo(a: Int64, b: Int64): Int64;"
                 rhs: Box::new(ast::Expr::Variable {
                     name: String::from("c")
                 }),
+            }
+        )
+    }
+
+    #[test]
+    fn unary() {
+        let src = String::from("&a");
+        let mut parser = Parser::<Utf8Decoder<_>, _>::new(src.as_bytes());
+
+        parser.get_next_token();
+        let expr = parser.parse_expr();
+        assert_eq!(
+            expr,
+            ast::Expr::Unary {
+                op: ast::UnaryOp::AddrOf,
+                operand: Box::new(ast::Expr::Variable {
+                    name: String::from("a")
+                })
             }
         )
     }

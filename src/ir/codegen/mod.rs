@@ -205,8 +205,8 @@ impl<'m> Codegen<'m> {
                 func_ir.set_insert_point(end_block);
             }
             ast::Stmt::VarDecl {
-                var_name,
-                type_name,
+                name: var_name,
+                ty: type_name,
                 expr,
             } => {
                 let alloca = self.ctx.alloca();
