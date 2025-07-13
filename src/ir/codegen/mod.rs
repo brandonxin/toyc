@@ -205,8 +205,8 @@ impl<'m> Codegen<'m> {
                 func_ir.set_insert_point(end_block);
             }
             ast::Stmt::VarDecl {
-                var_name,
-                type_name,
+                name: var_name,
+                ty: type_name,
                 expr,
             } => {
                 let alloca = self.ctx.alloca();
@@ -242,7 +242,7 @@ impl<'m> Codegen<'m> {
                 let ret = self.ctx.ret(value);
                 func_ir.add_instruction(ret);
             }
-            ast::Stmt::ExprStmt { expr } => {
+            ast::Stmt::Expr { expr } => {
                 self.visit_expr(expr, func_ir);
             }
         }

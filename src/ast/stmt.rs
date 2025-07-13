@@ -1,4 +1,6 @@
-use super::expr::Expr;
+use std::rc::Rc;
+
+use super::{Expr, TypeSpecifier};
 
 #[derive(PartialEq, Eq, Debug)]
 pub enum Stmt {
@@ -15,14 +17,14 @@ pub enum Stmt {
         body: Box<Stmt>,
     },
     VarDecl {
-        var_name: String,
-        type_name: String,
+        name: String,
+        ty: Rc<TypeSpecifier>,
         expr: Option<Box<Expr>>,
     },
     Return {
         expr: Option<Box<Expr>>,
     },
-    ExprStmt {
+    Expr {
         expr: Box<Expr>,
     },
 }

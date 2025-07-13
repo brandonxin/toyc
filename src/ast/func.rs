@@ -1,4 +1,6 @@
-use super::stmt::Stmt;
+use std::rc::Rc;
+
+use super::{Stmt, TypeSpecifier};
 
 #[derive(PartialEq, Eq, Debug)]
 pub struct Func {
@@ -23,15 +25,15 @@ impl Func {
 #[derive(PartialEq, Eq, Debug)]
 pub struct FuncDecl {
     name: String,
-    tyname: String,
+    ret_ty: Rc<TypeSpecifier>,
     params: Vec<Param>,
 }
 
 impl FuncDecl {
-    pub fn new(name: String, tyname: String, params: Vec<Param>) -> FuncDecl {
+    pub fn new(name: String, ret_ty: TypeSpecifier, params: Vec<Param>) -> FuncDecl {
         FuncDecl {
             name,
-            tyname,
+            ret_ty: Rc::new(ret_ty),
             params,
         }
     }
@@ -40,8 +42,8 @@ impl FuncDecl {
         &self.name
     }
 
-    pub fn tyname(&self) -> &str {
-        &self.tyname
+    pub fn ret_ty(&self) -> Rc<TypeSpecifier> {
+        self.ret_ty.clone()
     }
 
     pub fn params(&self) -> &Vec<Param> {
@@ -52,19 +54,22 @@ impl FuncDecl {
 #[derive(PartialEq, Eq, Debug)]
 pub struct Param {
     name: String,
-    tyname: String,
+    ty: Rc<TypeSpecifier>,
 }
 
 impl Param {
-    pub fn new(name: String, tyname: String) -> Param {
-        Param { name, tyname }
+    pub fn new(name: String, ty: TypeSpecifier) -> Param {
+        Param {
+            name,
+            ty: Rc::new(ty),
+        }
     }
 
     pub fn name(&self) -> &str {
         &self.name
     }
 
-    pub fn tyname(&self) -> &str {
-        &self.tyname
+    pub fn ty(&self) -> Rc<TypeSpecifier> {
+        self.ty.clone()
     }
 }
